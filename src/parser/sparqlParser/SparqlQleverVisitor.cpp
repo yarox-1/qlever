@@ -2685,6 +2685,8 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
     return createUnary(&makeTimezoneStrExpression);
   } else if (functionName == "timezone") {
     return createUnary(&makeTimezoneExpression);
+  } else if (functionName == "to_epoch") {
+    return createUnary(&makeToEpochExpression);
   } else if (functionName == "now") {
     AD_CONTRACT_CHECK(argList.empty());
     return std::make_unique<NowDatetimeExpression>(startTime_);
