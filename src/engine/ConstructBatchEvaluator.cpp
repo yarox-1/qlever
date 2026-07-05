@@ -69,16 +69,9 @@ EvaluatedVariableValues ConstructBatchEvaluator::evaluateVariableByColumn(
   for (const auto& [rowInBatch, id] : sortedIndices) {
     auto cached = idCache.tryGet(id);
     if (cached) {
-      // Note that a `LocalVocabIndex` Id may well produce a hit here, even
-      // though such Ids are never inserted into `idCache` (see the comment in
-      // Phase 2). `Id`s do not compare and hash bitwise: a `LocalVocabIndex`
-      // Id whose term also exists in the index vocabulary compares equal to,
-      // and hashes like, the corresponding `VocabIndex` Id (see
-      // `ValueId::compareThreeWay` and `AbslHashValue` in `ValueId.h`). Such a
-      // hit is safe, because the matched entry was inserted under a
-      // `VocabIndex` key and therefore does not point into any block-local
-      // `LocalVocab`; and it is correct, because equal `Id`s denote the same
-      // RDF term.
+      // A hit can never be a `LocalVocabIndex` Id (see the comment in Phase 2
+      // for why such Ids are not inserted into `idCache`).
+      AD_EXPENSIVE_CHECK(id.getDatatype() != Datatype::LocalVocabIndex);
       result[rowInBatch] = cached.value();
     } else if (!missIds.empty() && missIds.back() == id) {
       missRows.back().push_back(static_cast<size_t>(rowInBatch));
@@ -106,11 +99,11 @@ EvaluatedVariableValues ConstructBatchEvaluator::evaluateVariableByColumn(
       return ConstructBatchEvaluator::stringAndTypeToEvaluatedTerm(
           std::move(resolved));
     };
-    const std::optional<EvaluatedTerm> evaluated =
+    std::optional<EvaluatedTerm> evaluated =
         id.getDatatype() == Datatype::LocalVocabIndex
             ? evaluate(id)
             : idCache.getOrCompute(id, evaluate);
-    for (const size_t row : rows) {
+    for (size_t row : rows) {
       result[row] = evaluated;
     }
   }
