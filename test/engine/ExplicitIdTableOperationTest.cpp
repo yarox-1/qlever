@@ -138,6 +138,14 @@ TEST_P(ExplicitIdTableOperationTest, TrivialGetters) {
 }
 
 // _____________________________________________________________________________
+TEST_F(ExplicitIdTableOperationTest, isDeterministic) {
+  ExplicitIdTableOperation op(qec_, testTable_, testVariables_,
+                              testSortedColumns_, testLocalVocab_.clone(),
+                              testCacheKey_);
+  EXPECT_TRUE(op.isDeterministic());
+}
+
+// _____________________________________________________________________________
 TEST_P(ExplicitIdTableOperationTest, isDeterministic) {
   ExplicitIdTableOperation op(qec_, wrapTable(testTable_), testVariables_,
                               testSortedColumns_, testLocalVocab_.clone(),

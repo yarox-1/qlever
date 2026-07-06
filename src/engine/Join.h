@@ -65,6 +65,7 @@ class Join : public Operation {
 
  private:
   std::unique_ptr<JoinImpl> impl_;
+  [[nodiscard]] bool isDeterministicImpl() const override;
   VariableToColumnMap computeVariableToColumnMap() const override;
   uint64_t getSizeEstimateBeforeLimit() override;
 
