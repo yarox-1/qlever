@@ -95,8 +95,8 @@ void unescapeStringAndNumericEscapes(std::string_view input,
       // iterator directly: newer libc++ wraps the string-view iterator in
       // `__wrap_iter` and no longer converts it implicitly to `const char*`.
       // `length` is always positive here, so dereferencing is safe.
-      auto unesc = hexadecimalCharactersToUtf8Codepoint(
-          std::string_view(&*iterator, length));
+      auto unesc =
+          hexadecimalCharactersToUtf8(std::string_view(&*iterator, length));
       std::copy(unesc.begin(), unesc.end(), outputIterator);
     } else {
       (void)outputIterator;
