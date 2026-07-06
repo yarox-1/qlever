@@ -16,8 +16,9 @@ add_library(localVocab LocalVocabEntry.cpp LocalVocabContext.cpp LocalVocab.cpp)
 qlever_target_link_libraries(localVocab basicParser)
 
 add_library(index
-        Index.cpp IndexImpl.cpp IndexImpl.Text.cpp
+        Index.cpp IndexImpl.cpp IndexImpl.Text.cpp EncodedIriManager.cpp
         IndexMetaData.cpp MetaDataHandler.cpp
+        Vocabulary.cpp
         LocatedTriples.cpp Permutation.cpp TextMetaData.cpp
         DocsDB.cpp FTSAlgorithms.cpp
         CompressedRelation.cpp

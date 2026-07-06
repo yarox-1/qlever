@@ -437,8 +437,15 @@ boost::asio::awaitable<void> createPermutationWriterTask(
       return newIndex.finalizePermutation(meta, permutation, isInternal);
     };
   };
-  co_await (asCoroutine(makeFinalizerTasks(metaA, permutationA)) &&
-            asCoroutine(makeFinalizerTasks(metaB, permutationB)));
+  auto taskC =
+      net::co_spawn(ex, asCoroutine(makeFinalizerTasks(metaA, permutationA)),
+                    net::use_awaitable);
+  auto taskD =
+      net::co_spawn(ex, asCoroutine(makeFinalizerTasks(metaB, permutationB)),
+                    net::use_awaitable);
+
+  co_await std::move(taskC);
+  co_await std::move(taskD);
 }
 }  // namespace qlever::indexRebuilder
 

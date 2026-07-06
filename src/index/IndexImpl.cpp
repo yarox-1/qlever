@@ -937,8 +937,8 @@ std::string IndexImpl::getFilenameForPermutation(const Permutation& permutation,
 
 // _____________________________________________________________________________
 CompressedRelationWriter::WriterAndCallback IndexImpl::getWriterAndCallback(
-    IndexMetaData& metaData, size_t numColumns, const std::string& fileName,
-    std::optional<size_t> numWriterThreads) const {
+    IndexMetaData& metaData, size_t numColumns,
+    const std::string& fileName) const {
   auto writer = std::make_unique<CompressedRelationWriter>(
       numColumns, ad_utility::File(fileName, "w"),
       blocksizePermutationPerColumn_, numWriterThreads);
@@ -980,12 +980,11 @@ IndexImpl::createPermutationPairImpl(size_t numColumns,
 
 // _____________________________________________________________________________
 std::tuple<size_t, IndexMetaData> IndexImpl::createPermutationImpl(
+std::tuple<size_t, IndexMetaData> IndexImpl::createPermutationImpl(
     size_t numColumns, const std::string& fileName,
-    ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
-    std::optional<size_t> numWriterThreads) {
+    ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples) {
   IndexMetaData metaData;
-  auto writerAndCallback =
-      getWriterAndCallback(metaData, numColumns, fileName, numWriterThreads);
+  auto writerAndCallback = getWriterAndCallback(metaData, numColumns, fileName);
 
   // We can always supply the tables with the correct permutation. No need to
   // re-order everything.
