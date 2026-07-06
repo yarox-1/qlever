@@ -100,58 +100,16 @@ AsyncStatementBoundaryBlockSource::AsyncStatementBoundaryBlockSource(
       description_{std::move(description)} {}
 
 // ____________________________________________________________________________
-void AsyncStatementBoundaryBlockSource::assembleAndDeliver(Handler& handler,
-                                                           Block& rawInput,
-                                                           size_t endPosition) {
-  Block result;
-  result.reserve(remainder_.size() + endPosition);
-  result.insert(result.end(), remainder_.begin(), remainder_.end());
-  result.insert(result.end(), rawInput.begin(), rawInput.begin() + endPosition);
-  remainder_.clear();
-  remainder_.insert(remainder_.end(), rawInput.begin() + endPosition,
-                    rawInput.end());
-  handler(nullptr, std::move(result));
-}
+std::optional<ByteBlock> AsyncStatementBoundaryBlockSource::getNextBlockImpl() {
+  // Mark the source exhausted and return whatever is left in `remainder_`.
+  auto returnRemainder = [this]() -> std::optional<ByteBlock> {
+    exhausted_ = true;
+    if (remainder_.empty()) {
+      return std::nullopt;
+    }
+    return std::exchange(remainder_, Block{});
+  };
 
-// ____________________________________________________________________________
-void AsyncStatementBoundaryBlockSource::deliverRemainder(Handler& handler) {
-  exhausted_ = true;
-  if (remainder_.empty()) {
-    handler(nullptr, std::nullopt);
-  } else {
-    handler(nullptr, std::exchange(remainder_, Block{}));
-  }
-}
-
-// ____________________________________________________________________________
-void AsyncStatementBoundaryBlockSource::handleMissingBoundary(Handler handler,
-                                                              Block rawInput) {
-  AsyncBlockSource::callAsyncGetNextBlockImpl(
-      *inner_,
-      AsyncBlockSource::forwardErrors(
-          std::move(handler),
-          [this, rawInput = std::move(rawInput)](
-              Handler handler, std::optional<Block> peek) mutable {
-            if (!peek.has_value()) {
-              // `peek` is the result of fetching another block from
-              // `inner_` right after `rawInput`, so `nullopt` here means
-              // `inner_` is genuinely exhausted and `rawInput` is the last
-              // block. It is thus correct to also mark this source
-              // exhausted and return `remainder_ + rawInput` without
-              // requiring a statement boundary in it.
-              exhausted_ = true;
-              return assembleAndDeliver(handler, rawInput, rawInput.size());
-            }
-            // Inner source has more data: this is a real "statement too
-            // large" error.
-            return handler(
-                getNoStatementBoundaryError(description_, rawInput.size()),
-                std::nullopt);
-          }));
-}
-
-// ____________________________________________________________________________
-void AsyncStatementBoundaryBlockSource::asyncGetNextBlockImpl(Handler handler) {
   if (exhausted_) {
     return deliverRemainder(handler);
   }
@@ -172,28 +130,48 @@ void AsyncStatementBoundaryBlockSource::asyncGetNextBlockImpl(Handler handler) {
             }
             Block rawInput = std::move(*rawOpt);
 
-            // Search for the end of the last statement near the end of the
-            // raw block. `findEndPosition_` is user-supplied code, so an
-            // exception from it is delivered via the handler like any other
-            // error (and must not escape into the code that invoked this
-            // callback, see `BlockingBlockSource::asyncGetNextBlockImpl`).
-            std::optional<size_t> endPosition;
-            try {
-              endPosition = findEndPosition_(
-                  std::string_view{rawInput.data(), rawInput.size()});
-            } catch (...) {
-              return handler(std::current_exception(), std::nullopt);
-            }
-            if (endPosition.has_value()) {
-              return assembleAndDeliver(handler, rawInput, endPosition.value());
-            }
+  // Return the next block which is assembled by concatenating the
+  // `remainder_` with `rawInput[0..endPosition]`. The rest of the
+  // `rawInput` becomes the new `remainder_` for the next iteration.
+  auto assembleResult = [this, &rawInput](auto endPosition) {
+    Block result;
+    result.reserve(remainder_.size() + endPosition);
+    result.insert(result.end(), remainder_.begin(), remainder_.end());
+    result.insert(result.end(), rawInput.begin(),
+                  rawInput.begin() + endPosition);
+    remainder_.clear();
+    remainder_.insert(remainder_.end(), rawInput.begin() + endPosition,
+                      rawInput.end());
+    return result;
+  };
 
-            // No boundary found. Peek at the next raw block to decide how
-            // to handle this: if the inner source has more data, the
-            // current block is too short for a full statement and parsing
-            // must fail. If the inner source is exhausted, the current
-            // block is the last one; return it without requiring a match.
-            handleMissingBoundary(std::move(handler), std::move(rawInput));
-          }));
+  // Search for the end of the last statement near the end of the raw block.
+  auto endPosition =
+      findEndPosition_(std::string_view{rawInput.data(), rawInput.size()});
+  if (endPosition.has_value()) {
+    // End found: return remainder_ + rawInput[0..endPosition).
+    return assembleResult(endPosition.value());
+  }
+
+  // No boundary found. Peek at the next raw block to decide how to handle this:
+  // if the inner source has more data, the current block is too short for a
+  // full statement and parsing must fail. If the inner source is exhausted,
+  // the current block is the last one; return it without requiring a match.
+  auto peek = nextBlockFrom(*inner_);
+  if (peek) {
+    // Inner source has more data: this is a real "statement too large" error.
+    auto rawSize = rawInput.size();
+    throw std::runtime_error{absl::StrCat(
+        "No statement boundary (", description_,
+        ") was found in the current input batch (which was not the last one) "
+        "of size ",
+        ad_utility::insertThousandSeparator(std::to_string(rawSize), ','),
+        "; possible fixes are: "
+        "use `--parser-buffer-size` to increase the buffer size or "
+        "use `--parallel-parsing false` to disable parallel parsing")};
+  }
+  // The current block is the last one: return remainder_ + rawInput.
+  exhausted_ = true;
+  return assembleResult(rawInput.size());
 }
 }  // namespace qlever::parser

@@ -166,8 +166,13 @@ class BlockingBlockSource : public AsyncBlockSource {
   // Return `nullopt` to signal EOF, throw exceptions on errors.
   virtual std::optional<ByteBlock> getNextBlockImpl() = 0;
 
- private:
-  void asyncGetNextBlockImpl(Handler handler) override;
+  // Helper for `AsyncStatementBoundaryBlockSource`: call `getNextBlockImpl()`
+  // on a different `AsyncBlockSource` instance. C++ protected-access rules
+  // prevent calling a protected method on a sibling object, so this static
+  // trampoline is provided in the base.
+  static std::optional<ByteBlock> nextBlockFrom(AsyncBlockSource& src) {
+    return src.getNextBlockImpl();
+  }
 };
 
 // An `AsyncBlockSource` (see above) that reads blocks sequentially from a
@@ -214,8 +219,7 @@ class AsyncStatementBoundaryBlockSource : public AsyncBlockSource {
  public:
   // Wrap `inner` and cut its blocks at the positions determined by
   // `findEndPosition`. `description` is used in error messages to describe what
-  // marks the end of a statement. `exec` is only used as the default executor
-  // for dispatching completions (see `AsyncBlockSource`'s constructor).
+  // marks the end of a statement.
   AsyncStatementBoundaryBlockSource(const boost::asio::any_io_executor& exec,
                                     std::unique_ptr<AsyncBlockSource> inner,
                                     EndPositionFinder findEndPosition,

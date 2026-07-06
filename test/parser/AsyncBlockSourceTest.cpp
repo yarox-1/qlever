@@ -124,11 +124,28 @@ class ScriptedBlockSource : public qp::BlockingBlockSource {
     }
     return std::move(std::get<qp::ByteBlock>(step));
   }
+  return result;
+}
 
- private:
-  std::vector<Step> steps_;
-  size_t nextStep_ = 0;
-};
+// Scan `sv` from the back and return the position right after the last digit
+// that is immediately followed by a lowercase letter, or `std::nullopt` if
+// there is no such digit.
+std::optional<size_t> findDigitFollowedByLetter(std::string_view sv) {
+  for (size_t i = sv.size(); i-- > 1;) {
+    if (sv[i] >= 'a' && sv[i] <= 'z' && sv[i - 1] >= '0' && sv[i - 1] <= '9') {
+      return i;
+    }
+  }
+  return std::nullopt;
+}
+
+// Scan `sv` from the back and return the position right after the last
+// character in the range `x`-`z`, or `std::nullopt` if there is none.
+std::optional<size_t> findXToZ(std::string_view sv) {
+  size_t pos = sv.find_last_of("xyz");
+  return pos == std::string_view::npos ? std::nullopt
+                                       : std::optional<size_t>{pos + 1};
+}
 
 }  // namespace
 
@@ -167,8 +184,8 @@ TEST(AsyncStatementBoundaryBlockSource, CutsAtBoundary) {
     // precedes a letter, as determined by `findDigitFollowedByLetter`.
     qp::AsyncStatementBoundaryBlockSource buf(
         pool.get_executor(),
-        std::make_unique<qp::FileBlockSource>(pool.get_executor(), blocksize,
-                                              filename),
+        std::make_unique<qp::AsyncFileBlockSource>(pool.get_executor(),
+                                                   blocksize, filename),
         findDigitFollowedByLetter, "a digit followed by a letter");
     std::vector<qp::ByteBlock> expected{
         {'a', 'b', '1'}, {'c', 'd', 'e', '2', '3'}, {'f', 'g', 'h'}};
@@ -180,12 +197,11 @@ TEST(AsyncStatementBoundaryBlockSource, CutsAtBoundary) {
     // large for one block, so the parsing fails.
     qp::AsyncStatementBoundaryBlockSource buf(
         pool.get_executor(),
-        std::make_unique<qp::FileBlockSource>(pool.get_executor(), blocksize,
-                                              filename),
+        std::make_unique<qp::AsyncFileBlockSource>(pool.get_executor(),
+                                                   blocksize, filename),
         findXToZ, "a letter from x to z");
-    EXPECT_THAT(
-        drainBlocks(buf).errorMessage_,
-        ::testing::Optional(::testing::ContainsRegex("No statement boundary")));
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        drainAllBlocks(buf), ::testing::ContainsRegex("No statement boundary"));
   }
   {
     // The same example but with a larger blocksize, s.t. the complete input
@@ -193,8 +209,8 @@ TEST(AsyncStatementBoundaryBlockSource, CutsAtBoundary) {
     // can never be found.
     qp::AsyncStatementBoundaryBlockSource buf(
         pool.get_executor(),
-        std::make_unique<qp::FileBlockSource>(pool.get_executor(), 100_B,
-                                              filename),
+        std::make_unique<qp::AsyncFileBlockSource>(pool.get_executor(), 100_B,
+                                                   filename),
         findXToZ, "a letter from x to z");
     std::vector<qp::ByteBlock> expected{
         {'a', 'b', '1', 'c', 'd', 'e', '2', '3', 'f', 'g', 'h'}};
@@ -221,8 +237,8 @@ TEST(AsyncStatementBoundaryBlockSource, LongLookahead) {
     // so the manual scan has to look back across many bytes.
     qp::AsyncStatementBoundaryBlockSource buf(
         pool.get_executor(),
-        std::make_unique<qp::FileBlockSource>(pool.get_executor(), blocksize,
-                                              filename),
+        std::make_unique<qp::AsyncFileBlockSource>(pool.get_executor(),
+                                                   blocksize, filename),
         findDigitFollowedByLetter, "a digit followed by a letter");
     std::vector<qp::ByteBlock> expected{{'a', 'b', 'c', 'd', 'e', 'f', '1'}};
     expected.emplace_back(2000, 'x');
