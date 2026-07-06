@@ -9,6 +9,17 @@
 
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
+// Copyright 2015 - 2026 The QLever Authors, in particular:
+
+// 2015-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+// 2018-2026 Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de), UFR
+// 2025 Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
+// 2026 Mark Veser (mark.veser87@gmail.com)
+
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "engine/Join.h"
 
@@ -67,9 +78,6 @@ bool Join::columnOriginatesFromGraphOrUndef(const Variable& variable) const {
 
 // _____________________________________________________________________________
 string Join::getCacheKeyImpl() const { return impl_->getCacheKeyImpl(); }
-
-// _____________________________________________________________________________
-bool Join::isDeterministicImpl() const { return impl_->isDeterministic(); }
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> Join::cloneImpl() const {

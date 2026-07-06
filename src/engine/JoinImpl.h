@@ -124,8 +124,6 @@ class JoinImpl : public Operation {
   Result computeResult(bool requestLaziness) override;
   VariableToColumnMap computeVariableToColumnMap() const override;
 
-  [[nodiscard]] bool isDeterministicImpl() const override { return true; }
-
   std::optional<std::shared_ptr<QueryExecutionTree>>
   makeTreeWithStrippedColumns(
       const std::set<Variable>& variables) const override;
