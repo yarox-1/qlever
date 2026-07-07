@@ -7,8 +7,6 @@
 #ifndef QLEVER_SRC_LIBQLEVER_QLEVER_H
 #define QLEVER_SRC_LIBQLEVER_QLEVER_H
 
-#include <gtest/gtest_prod.h>
-
 #include <boost/optional.hpp>
 #include <memory>
 #include <optional>
@@ -372,6 +370,34 @@ class Qlever {
   // before it can answer queries.
   explicit Qlever(const EngineConfig& config, bool skipLoading = false);
 
+  using PlannedQuery = qlever::PlannedQuery;
+
+  // Run the query planner on `parsedQuery`. Despite the name, `ParsedQuery`
+  // is also used to represent SPARQL update operations (see
+  // ParsedQuery::hasUpdateClause()); this function handles both cases
+  // uniformly.
+  //
+  // If `requestTimer` is set, the elapsed time of that timer at the end of
+  // query planning is stored in the query's runtime information as
+  // `timeQueryPlanning`. This information can be accessed via the
+  // query execution tree's root operation.
+  //
+  // TODO<joka921,damekt> The `timeLimit` is currently only used for
+  // non-cancelable operations (in particular sorting). The time limit applies
+  // from the time this function is called until the execution of the query
+  // has finished. This might be very unintuitive when the `PlannedQuery` is
+  // stored for later execution. This is not an issue for now (only the
+  // `Server` actually imposes time limits and then executes the queries right
+  // away), but should be addressed in the future once the timeout management
+  // also is moved into the `QLever` class.
+  PlannedQuery planQuery(
+      ParsedQuery&& parsedQuery, std::optional<TimeLimit> timeLimit,
+      QueryExecutionContext& qec, SharedCancellationHandle handle,
+      boost::optional<const ad_utility::Timer&> requestTimer =
+          boost::none) const;
+
+  // Parse and plan the given `query` (see `planQuery` above; despite the
+  // name, `query` may also be a SPARQL update operation).
   // Run the query planner on `parsedQuery`. Despite the name, `ParsedQuery`
   // is also used to represent SPARQL update operations (see
   // ParsedQuery::hasUpdateClause()); this function handles both cases
@@ -421,38 +447,6 @@ class Qlever {
   // or modify the `ParsedQuery` before it is planned, to measure the time for
   // the parsing and the planning separately, and to reuse a parsed query (see
   // below).
-  //
-  // NOTE ON REUSING A PARSED QUERY: The `ParsedQuery` depends on the
-  // `QueryExecutionContext` it was parsed with, but only through that context's
-  // `EncodedIriManager` (which determines which IRIs are encoded directly in
-  // the ID). It is therefore valid, and saves the repeated parsing of the same
-  // query, to take the `ParsedQuery` out of the result and plan it against a
-  // *different* context, as long as that context has an equivalent
-  // `EncodedIriManager` (see `bindParsedQuery`). This is in particular the case
-  // for several `Qlever` instances whose indexes were built with the same
-  // `IndexBuilderConfig::prefixesForIdEncodedIris_`. If the
-  // `EncodedIriManager`s differ, the affected IRIs are silently misinterpreted,
-  // so this has to be ensured by the caller.
-  ParsedQueryAndContext parseQuery(
-      std::string query, const std::vector<DatasetClause>& datasetClauses = {},
-      std::function<void(std::string)> updateCallback = ad_utility::noop,
-      bool pinSubtrees = false, bool pinResult = false) const;
-
-  // Bundle an already-parsed query with a fresh `QueryExecutionContext` of this
-  // instance, so that it can be planned here. Together with `parseQuery` this
-  // makes it possible to parse a query once and plan it on several instances.
-  //
-  // PRECONDITION: `parsedQuery` must have been parsed with a context whose
-  // `EncodedIriManager` is equivalent to this instance's; see the note on
-  // reusing a parsed query in `parseQuery` above. This is not checked.
-  ParsedQueryAndContext bindParsedQuery(
-      ParsedQuery parsedQuery,
-      std::function<void(std::string)> updateCallback = ad_utility::noop,
-      bool pinSubtrees = false, bool pinResult = false) const;
-
-  // Parse and plan the given `query` (see `planQuery` above; despite the
-  // name, `query` may also be a SPARQL update operation). This is exactly
-  // `parseQuery` followed by `planQuery`.
   //
   // NOTES: This is useful as a separate function for the following reasons.
   //

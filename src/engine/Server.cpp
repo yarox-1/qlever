@@ -898,11 +898,11 @@ std::pair<bool, bool> Server::determineResultPinning(
 
 // ____________________________________________________________________________
 Server::PlannedQuery Server::planQuery(
-    ParsedQuery&& operation, QueryExecutionContext& qec,
-    ad_utility::SharedCancellationHandle handle, TimeLimit timeLimit,
-    const ad_utility::Timer& requestTimer) const {
+    ParsedQuery&& operation, const ad_utility::Timer& requestTimer,
+    TimeLimit timeLimit, QueryExecutionContext& qec,
+    ad_utility::SharedCancellationHandle handle) const {
   PlannedQuery plannedQuery = qlever().planQuery(
-      std::move(operation), qec, std::move(handle), timeLimit, requestTimer);
+      std::move(operation), timeLimit, qec, std::move(handle), requestTimer);
 
   const auto& qet = plannedQuery.queryExecutionTree();
   const auto& runtimeInfoWholeQuery =

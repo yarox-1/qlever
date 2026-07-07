@@ -6,10 +6,6 @@
 
 #include "libqlever/Qlever.h"
 
-#include <absl/strings/str_cat.h>
-#include <absl/time/clock.h>
-#include <absl/time/time.h>
-
 #include <boost/optional.hpp>
 #include <functional>
 #include <memory>
@@ -241,8 +237,8 @@ void Qlever::eraseResultWithName(std::string name) {
 
 // ___________________________________________________________________________
 PlannedQuery Qlever::planQuery(
-    ParsedQuery&& parsedQuery, QueryExecutionContext& qec,
-    SharedCancellationHandle handle, std::optional<TimeLimit> timeLimit,
+    ParsedQuery&& parsedQuery, std::optional<TimeLimit> timeLimit,
+    QueryExecutionContext& qec, ad_utility::SharedCancellationHandle handle,
     boost::optional<const ad_utility::Timer&> requestTimer) const {
   handle->throwIfCancelled();
   QueryPlanner qp{&qec, handle};
@@ -268,6 +264,25 @@ PlannedQuery Qlever::planQuery(
     runtimeInfoWholeQuery.timeQueryPlanning = timeForQueryPlanning;
   }
   return plannedQuery;
+}
+
+// ___________________________________________________________________________
+PlannedQuery Qlever::parseAndPlanQuery(
+    std::string query, const std::vector<DatasetClause>& datasetClauses,
+    ad_utility::SharedCancellationHandle handle,
+    std::optional<TimeLimit> timeLimit,
+    std::function<void(std::string)> updateCallback, bool pinSubtrees,
+    bool pinResult) const {
+  auto qecPtr = createQueryExecutionContext(
+      indexAndViewsSnapshot(), std::move(updateCallback), pinSubtrees,
+      pinResult, disableCaching_);
+
+  auto parsedQuery = SparqlParser::parseQuery(
+      &qecPtr->getIndex().getImpl().encodedIriManager(), std::move(query),
+      datasetClauses);
+
+  return planQuery(std::move(parsedQuery), timeLimit, *qecPtr,
+                   std::move(handle));
 }
 
 // ___________________________________________________________________________
