@@ -1189,9 +1189,7 @@ TEST_F(DeltaTriplesTest, addFromSnapshotDiff) {
   newDeltaTriples.addFromSnapshotDiff(*originalSnapshot, *newSnapshot,
                                       idMapping, std::move(cancellationHandle),
                                       tracer);
-  ASSERT_NO_THROW(
-      newDeltaTriples.getLocatedTriplesForPermutation(Permutation::SPO)
-          .numTriplesForTesting());
+  newDeltaTriples.consolidateAll();
 
   EXPECT_THAT(newDeltaTriples, NumTriples(2, 1, 3, 2, 0));
   auto locatedTriples =

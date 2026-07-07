@@ -94,11 +94,9 @@ void DeltaTriples::clear() {
 }
 
 // ____________________________________________________________________________
-template <typename IsInternal>
 void DeltaTriples::eraseTriplesInPermutation(
     Permutation::Enum permutation, ql::span<const IdTriple<0>> triples,
-    IsInternal isInternal,
-    ad_utility::SharedCancellationHandle cancellationHandle) {
+    auto isInternal, ad_utility::SharedCancellationHandle cancellationHandle) {
   // The requested `Permutation` and `LocatedTriplesPerBlock` for that
   // permutation from which the triples are erased.
   const auto& perm = index_.getPermutation(permutation);
@@ -667,7 +665,7 @@ void DeltaTriples::writeToDisk() const {
       tempPath, localVocab_,
       std::array{toRange(triplesSetsNormal_.triplesDeleted_),
                  toRange(triplesSetsNormal_.triplesInserted_)});
-  ql::filesystem::rename(tempPath, filenameForPersisting_.value());
+  std::filesystem::rename(tempPath, filenameForPersisting_.value());
 }
 
 // _____________________________________________________________________________
