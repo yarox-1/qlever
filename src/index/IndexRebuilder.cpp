@@ -18,6 +18,7 @@
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/experimental/awaitable_operators.hpp>
+#include <boost/asio/experimental/awaitable_operators.hpp>
 #include <boost/asio/post.hpp>
 #include <boost/asio/this_coro.hpp>
 #include <boost/asio/thread_pool.hpp>
@@ -381,8 +382,18 @@ namespace {
 // the second is even started, serializing work that is meant to run in
 // parallel. Posting first yields the thread immediately, so the siblings are
 // queued onto the pool and actually spread across its threads.
+// Run the synchronous `func` as a distinct task on the current executor. The
+// initial `post` is essential and easy to overlook: `co_spawn` (used by the
+// `&&` operator below) starts a child coroutine *inline* via `dispatch()` on
+// the spawning thread. Because `func` is fully synchronous and never suspends,
+// without this reschedule the first sibling task would run to completion before
+// the second is even started, serializing work that is meant to run in
+// parallel. Posting first yields the thread immediately, so the siblings are
+// queued onto the pool and actually spread across its threads.
 template <typename Func>
 boost::asio::awaitable<std::invoke_result_t<Func>> asCoroutine(Func func) {
+  namespace net = boost::asio;
+  co_await net::post(co_await net::this_coro::executor, net::use_awaitable);
   namespace net = boost::asio;
   co_await net::post(co_await net::this_coro::executor, net::use_awaitable);
   co_return std::invoke(func);
@@ -401,6 +412,7 @@ boost::asio::awaitable<void> createPermutationWriterTask(
     std::function<void(size_t)> progress) {
   namespace net = boost::asio;
   using namespace net::experimental::awaitable_operators;
+  using namespace net::experimental::awaitable_operators;
   auto makeTaskForPermutation = [&](const Permutation& permutation) {
     return [&newIndex, &permutation, isInternal, &locatedTriplesSharedState,
             &localVocabMapping, &insertionPositions, &blankNodeBlocks,
@@ -409,28 +421,18 @@ boost::asio::awaitable<void> createPermutationWriterTask(
           *locatedTriplesSharedState);
       auto [numColumns, additionalColumns] =
           getNumberOfColumnsAndAdditionalColumns(blockMetadataRanges);
-      // Wrap the input range so that the number of processed triples is
-      // reported to `progress` per block.
-      auto countingStream = ad_utility::InputRangeTypeErased<IdTableStatic<0>>{
-          ad_utility::CachingTransformInputRange{
-              readIndexAndRemap(
-                  permutation, blockMetadataRanges, locatedTriplesSharedState,
-                  localVocabMapping, insertionPositions, blankNodeBlocks,
-                  minBlankNodeIndex, cancellationHandle, additionalColumns),
-              [progress](IdTableStatic<0>& table) {
-                progress(table.numRows());
-                return std::move(table);
-              }}};
       return newIndex.createPermutationWithoutMetadata(
-          numColumns, std::move(countingStream), permutation, isInternal);
+          numColumns,
+          readIndexAndRemap(
+              permutation, blockMetadataRanges, locatedTriplesSharedState,
+              localVocabMapping, insertionPositions, blankNodeBlocks,
+              minBlankNodeIndex, cancellationHandle, additionalColumns),
+          permutation, isInternal);
     };
   };
-  // Workaround for a GCC 15/16 bug: the hidden object of a by-value
-  // structured binding is not destroyed when the coroutine frame is
-  // destroyed while suspended (gcc.gnu.org bug 124584).
-  auto results = co_await (asCoroutine(makeTaskForPermutation(permutationA)) &&
-                           asCoroutine(makeTaskForPermutation(permutationB)));
-  auto& [resultA, resultB] = results;
+  auto [resultA, resultB] =
+      co_await (asCoroutine(makeTaskForPermutation(permutationA)) &&
+                asCoroutine(makeTaskForPermutation(permutationB)));
   auto& [_, metaA] = resultA;
   auto& [__, metaB] = resultB;
   metaA.exchangeMultiplicities(metaB);
@@ -442,15 +444,8 @@ boost::asio::awaitable<void> createPermutationWriterTask(
       return newIndex.finalizePermutation(meta, permutation, isInternal);
     };
   };
-  auto taskC =
-      net::co_spawn(ex, asCoroutine(makeFinalizerTasks(metaA, permutationA)),
-                    net::use_awaitable);
-  auto taskD =
-      net::co_spawn(ex, asCoroutine(makeFinalizerTasks(metaB, permutationB)),
-                    net::use_awaitable);
-
-  co_await std::move(taskC);
-  co_await std::move(taskD);
+  co_await (asCoroutine(makeFinalizerTasks(metaA, permutationA)) &&
+            asCoroutine(makeFinalizerTasks(metaB, permutationB)));
 }
 }  // namespace qlever::indexRebuilder
 
