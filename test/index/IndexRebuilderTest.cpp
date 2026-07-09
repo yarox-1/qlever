@@ -4,10 +4,7 @@
 //
 //  UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
-#include <absl/cleanup/cleanup.h>
 #include <absl/strings/str_cat.h>
-#include <absl/strings/str_format.h>
-#include <absl/time/time.h>
 #include <gmock/gmock.h>
 
 #include <boost/asio/awaitable.hpp>
@@ -15,20 +12,8 @@
 #include <boost/asio/detached.hpp>
 #include <boost/asio/thread_pool.hpp>
 #include <boost/asio/use_future.hpp>
-#include <chrono>
-#include <deque>
-#include <fstream>
-#include <future>
-#include <iterator>
-#include <numeric>
-#include <optional>
-#include <string>
-#include <string_view>
-#include <thread>
+#include <filesystem>
 
-#include "../ServerTestHelpers.h"
-#include "../util/AsioTestHelpers.h"
-#include "../util/FileTestHelpers.h"
 #include "../util/GTestHelpers.h"
 #include "../util/HttpRequestHelpers.h"
 #include "../util/IdTableHelpers.h"
@@ -116,6 +101,7 @@ TEST(IndexRebuilder, materializeEmptyLocalVocab) {
   auto oldIndex = ad_utility::testing::makeTestIndex(
       "materializeEmptyLocalVocab", std::move(config));
   std::string vocabPrefix = gtestCurrentTestName();
+  std::string vocabPrefix = gtestCurrentTestName();
   std::string vocabFileName = vocabPrefix + VOCAB_SUFFIX;
   absl::Cleanup removeVocabFiles{[&vocabFileName, &type] {
     deleteVocabFiles(vocabFileName, type.value());
@@ -141,6 +127,7 @@ TEST(IndexRebuilder, materializeLocalVocab) {
   config.vocabularyType = type;
   auto oldIndex = ad_utility::testing::makeTestIndex("materializeLocalVocab",
                                                      std::move(config));
+  std::string vocabPrefix = gtestCurrentTestName();
   std::string vocabPrefix = gtestCurrentTestName();
   absl::Cleanup removeVocabFiles{[&vocabPrefix, &type] {
     deleteVocabFiles(vocabPrefix + VOCAB_SUFFIX, type.value());
@@ -544,6 +531,7 @@ TEST(IndexRebuilder, createPermutationWriterTask) {
   const auto& index = qec->getIndex();
   IndexImpl newIndex{ad_utility::makeUnlimitedAllocator<Id>()};
   std::string prefix = gtestCurrentTestName();
+  std::string prefix = gtestCurrentTestName();
   std::array<std::string_view, 4> suffixes{".index.pos", ".index.pos.meta",
                                            ".index.pso", ".index.pso.meta"};
   newIndex.setOnDiskBase(prefix);
@@ -589,6 +577,7 @@ TEST(IndexRebuilder, createPermutationWriterTask) {
 TEST(IndexRebuilder, materializeToIndex) {
   auto cancellationHandle =
       std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
+  std::string baseFolder = gtestCurrentTestName();
   std::string baseFolder = gtestCurrentTestName();
   std::string newIndexName = baseFolder + "/index";
   std::string logFile = newIndexName + ".log";
@@ -709,6 +698,8 @@ TEST(IndexRebuilder, materializeToIndexWithZeroMemorySourceIndex) {
   // and does not rely on the source index's allocator.
   auto cancellationHandle =
       std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
+  std::string sourceIndexName = gtestCurrentTestName();
+  std::string baseFolder = absl::StrCat(sourceIndexName, "-new");
   std::string sourceIndexName = gtestCurrentTestName();
   std::string baseFolder = absl::StrCat(sourceIndexName, "-new");
   std::string newIndexName = baseFolder + "/index";

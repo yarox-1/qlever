@@ -9,6 +9,7 @@
 
 #include <cstdlib>
 #include <ctime>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <memory>
@@ -97,13 +98,14 @@ class MergeVocabularyTest : public ::testing::Test {
 
     // Create a subdirectory for the test files in the working directory.
     _basePath = _basePath + "/";
-    ql::error_code errorCode;
-    ql::filesystem::create_directories(_basePath, errorCode);
+    std::error_code errorCode;
+    std::filesystem::create_directories(_basePath, errorCode);
     if (errorCode) {
       std::cerr << "Could not create the directory for the test files. This "
                    "might lead to test failures\n";
     }
 
+    // Prepend the created directory to the paths.
     // Prepend the created directory to the paths.
     _path0 = _basePath + _path0;
     _path1 = _basePath + _path1;
@@ -181,8 +183,8 @@ class MergeVocabularyTest : public ::testing::Test {
   // __________________________________________________________________
   ~MergeVocabularyTest() {
     // Delete the test files (to debug a test failure, comment this out).
-    ql::error_code errorCode;
-    ql::filesystem::remove_all(_basePath, errorCode);
+    std::error_code errorCode;
+    std::filesystem::remove_all(_basePath, errorCode);
   }
 
   // read all bytes from a file (e.g. to check equality of small test files)
@@ -263,12 +265,22 @@ TEST(MergeVocabulary, mergeVocabularyAssertion) {
 
   std::string basePath = gtestCurrentTestName();
 
-  // Intentionally in wrong order, so that the merge detects a violated order.
-  std::array<std::string_view, 3> unorderedWords{"\"c\"", "\"b\"", "\"a\""};
-  writePartialVocabularyFile(
-      absl::StrCat(basePath, PARTIAL_VOCAB_WORDS_INFIX, 0), unorderedWords);
-  writePartialVocabularyFile(
-      absl::StrCat(basePath, PARTIAL_VOCAB_WORDS_INFIX, 1), unorderedWords);
+  auto writeUnorderedFile = [](const auto& path) {
+    ad_utility::serialization::FileWriteSerializer partialVocab(path);
+    // Intentionally in wrong order.
+    std::array<std::string_view, 3> strings{"\"c\"", "\"b\"", "\"a\""};
+    partialVocab << strings.size();
+    size_t localIdx = 0;
+    for (auto s : strings) {
+      partialVocab << s;
+      partialVocab << false;
+      partialVocab << localIdx;
+      localIdx++;
+    }
+  };
+
+  writeUnorderedFile(absl::StrCat(basePath, PARTIAL_VOCAB_WORDS_INFIX, 0));
+  writeUnorderedFile(absl::StrCat(basePath, PARTIAL_VOCAB_WORDS_INFIX, 1));
 
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       mergeVocabulary(
