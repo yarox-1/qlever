@@ -655,27 +655,8 @@ FetchContent_Declare(
 # See https://github.com/google/googletest/issues/5015
 if (EMSCRIPTEN)
     add_compile_definitions(GTEST_HAS_PTHREAD=1)
-
-    # With Emscripten, the DWARF debug info that `-g` puts into the object
-    # files (which is all that CMake's `Debug`/`RelWithDebInfo` flags do) only
-    # ends up in the final `.wasm` when `-g` is ALSO passed at link time.
-    # Add it, so that debug build types produce binaries that can be debugged
-    # and profiled with source information in the browser dev tools.
-    add_link_options("$<$<CONFIG:Debug,RelWithDebInfo>:-g>")
 endif ()
-FetchContent_MakeAvailable(googletest ctre abseil fsst nlohmann-json antlr range-v3 spatialjoin uriparser opentelemetry-cpp s2 re2)
-
-# Depending on `BUILD_SHARED_LIBS`, the `antlr4` build creates either a shared or
-# a static library target. Define the alias `antlr4_umbrella` such that the rest
-# of the build can link against the correct one without further case
-# distinctions.
-if (BUILD_SHARED_LIBS)
-    target_compile_options(antlr4_shared PRIVATE -fPIC -Wno-all -Wno-extra -Wno-error -Wno-deprecated-declarations)
-    add_library(antlr4_umbrella ALIAS antlr4_shared)
-else ()
-    target_compile_options(antlr4_static PRIVATE -Wno-all -Wno-extra -Wno-error -Wno-deprecated-declarations)
-    add_library(antlr4_umbrella ALIAS antlr4_static)
-endif ()
+FetchContent_MakeAvailable(googletest ctre abseil re2 fsst s2 nlohmann-json antlr range-v3 spatialjoin uriparser)
 # Disable some warnings in RE2 and GTEST
 target_compile_options(s2 PRIVATE -Wno-sign-compare -Wno-unused-parameter -Wno-class-memaccess -Wno-comment -Wno-redundant-move -Wno-unknown-warning-option -Wno-maybe-uninitialized -Wno-class-memaccess -Wno-unused-but-set-variable -Wno-unused-function -Wno-nullability-completeness)
 target_compile_options(re2 PRIVATE -Wno-unused-parameter -Wno-deprecated-declarations)

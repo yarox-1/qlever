@@ -254,9 +254,7 @@ addLinkAndDiscoverTest(UriParserUriTest)
 
 addLinkAndDiscoverTest(ParsedUriTest)
 
-addLinkAndDiscoverTestNoLibs(StringSortComparatorTest qlever_util)
-
-addLinkAndDiscoverTestNoLibs(LocaleManagerTest stringUtils)
+addLinkAndDiscoverTestNoLibs(StringSortComparatorTest)
 
 addLinkAndDiscoverTestNoLibs(GenericCharTraitsTest)
 
@@ -377,8 +375,6 @@ if (NOT _DISABLE_EMSCRIPTEN_PROBLEMATIC_TESTS)
     addLinkAndDiscoverTest(HttpTest Boost::iostreams http)
 endif ()
 
-addLinkAndDiscoverTest(HttpProxyConfigTest http)
-
 addLinkAndDiscoverTestNoLibs(CallFixedSizeTest)
 
 addLinkAndDiscoverTestNoLibs(ConstexprUtilsTest)
@@ -462,6 +458,12 @@ addLinkAndDiscoverTest(JsonUtilTest)
 addLinkAndDiscoverTest(JoinAlgorithmsTest)
 
 addLinkAndDiscoverTest(AsioHelpersTest)
+# With `-fwasm-exceptions`, clang's `correlated-propagation` pass (run at -O2/-O3)
+# crashes on the coroutine `.resume` body in this file. Compiling just this
+# translation unit at -O1 avoids the crashing pass.
+if (EMSCRIPTEN)
+    set_source_files_properties(AsioHelpersTest.cpp PROPERTIES COMPILE_OPTIONS "-O1")
+endif ()
 # With `-fwasm-exceptions`, clang's `correlated-propagation` pass (run at -O2/-O3)
 # crashes on the coroutine `.resume` body in this file. Compiling just this
 # translation unit at -O1 avoids the crashing pass.

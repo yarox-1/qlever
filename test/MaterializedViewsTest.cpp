@@ -782,6 +782,10 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
 // under Emscripten anyway (threaded server integration).
 #ifndef __EMSCRIPTEN__
 TEST_F(MaterializedViewsTest, serverIntegration) {
+#ifdef __EMSCRIPTEN__
+  GTEST_SKIP() << "Skipped under Emscripten: this test hangs (threaded server "
+                  "integration).";
+#endif
   SKIP_IF_LOGLEVEL_IS_LOWER(INFO);
   using namespace serverTestHelpers;
   // Config for the plain `Server` instances constructed below.

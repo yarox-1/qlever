@@ -6,6 +6,7 @@
 
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_replace.h>
+#include <unicode/unistr.h>
 
 #include <charconv>
 #include <ctre-unicode.hpp>
