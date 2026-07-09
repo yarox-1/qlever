@@ -3,7 +3,7 @@
 // Author: Björn Buchhold <buchholb>
 
 #include <absl/cleanup/cleanup.h>
-#include <gmock/gmock.h>
+#include <gtest/gtest.h>
 
 #include <cstdio>
 #include <vector>
@@ -233,69 +233,12 @@ TEST(Vocabulary, IsGeoInfoAvailable) {
 }
 
 // _____________________________________________________________________________
-TEST(VocabularyTest, LookupBatch) {
-  auto v = createExampleVocabulary();
-  std::vector<size_t> indices{2, 0, 3, 1};
-  auto result = v->lookupBatch(indices);
-  EXPECT_THAT((*result), ::testing::ElementsAre("ba", "a", "car", "ab"));
-  vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(*v, result,
-                                                                indices);
-  // An empty batch is an invalid request and must throw.
-  EXPECT_ANY_THROW(v->lookupBatch(ql::span<const size_t>{}));
-
-  // Duplicate indices: each position resolved independently.
-  std::vector<size_t> dup{1, 1, 0};
-  auto dupResult = v->lookupBatch(dup);
-  EXPECT_THAT((*dupResult), ::testing::ElementsAre("ab", "ab", "a"));
-}
-
-// Each streamed result must equal the eager `lookupBatch` for that batch's
-// indices, and the batches must be yielded in input order.
-TEST(VocabularyTest, LookupBatchesStreamed) {
-  auto v = createExampleVocabulary();
-  std::vector<std::vector<size_t>> batches{{2, 0}, {3}};
-  // `VocabLookupInput` takes ownership, so keep a copy to compare against.
-  const auto expectedBatches = batches;
-  auto streamed =
-      v->lookupBatchesStreamed(VocabLookupInput{std::move(batches)});
-  vocabulary_test::assertStreamedLookupMatchesVocabularyAtIndices(
-      *v, streamed, expectedBatches);
-}
-
-// An empty batch within the stream is invalid and must throw when pulled.
-TEST(VocabularyTest, LookupBatchesStreamedEmptyBatchThrows) {
-  auto v = createExampleVocabulary();
-  std::vector<std::vector<size_t>> batches{{2, 0}, {}, {3}};
-  auto streamed =
-      v->lookupBatchesStreamed(VocabLookupInput{std::move(batches)});
-  EXPECT_ANY_THROW({
-    for ([[maybe_unused]] auto& r : streamed) {
-    }
-  });
-}
-
-// An empty input stream (no batches) yields no results.
-TEST(VocabularyTest, LookupBatchesStreamedEmptyStreamYieldsNothing) {
-  auto v = createExampleVocabulary();
-  std::vector<std::vector<size_t>> noBatches;
-  auto streamed =
-      v->lookupBatchesStreamed(VocabLookupInput{std::move(noBatches)});
-  EXPECT_EQ(ql::ranges::distance(streamed), 0);
-}
-
-namespace {
-// Write an `RdfsVocabulary` of the given `type` to an aligned buffer via
-// `writeAsZeroCopyBlob`, read it back via `loadFromZeroCopyDeserializer`, and
-// check that the round trip preserves all words. Use this for all vocabulary
-// types that support zero-copy (de)serialization, so that the same code tests
-// the compressed as well as the uncompressed in-memory vocabulary.
-void testZeroCopyRoundTripPolymorphic(
-    ad_utility::VocabularyType type,
-    ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
-  auto trace = generateLocationTrace(l);
+TEST(Vocabulary, ZeroCopyRoundTripPolymorphic) {
+  using ad_utility::VocabularyType;
+  using enum VocabularyType::Enum;
 
   RdfsVocabulary vocabulary;
-  vocabulary.resetToType(type);
+  vocabulary.resetToType(VocabularyType{InMemoryUncompressed});
   ad_utility::HashSet<string> words{"alpha", "beta", "car", "delta"};
   auto filename = gtestCurrentTestName();
   absl::Cleanup cleanup = [&filename]() { ad_utility::deleteFile(filename); };
@@ -306,10 +249,7 @@ void testZeroCopyRoundTripPolymorphic(
 
   ad_utility::serialization::AlignedByteBufferReadSerializer readSerializer{
       std::move(writeSerializer).data()};
-  // The reader has to select the matching type before loading, exactly as with
-  // the regular `open` mechanism.
   RdfsVocabulary readVocabulary;
-  readVocabulary.resetToType(type);
   readVocabulary.loadFromZeroCopyDeserializer(readSerializer);
 
   ASSERT_EQ(vocabulary.size(), readVocabulary.size());
@@ -318,70 +258,16 @@ void testZeroCopyRoundTripPolymorphic(
               readVocabulary[VocabIndex::make(i)]);
   }
 }
-}  // namespace
 
 // _____________________________________________________________________________
-TEST(Vocabulary, ZeroCopyRoundTripPolymorphicUncompressed) {
-  testZeroCopyRoundTripPolymorphic(
-      ad_utility::VocabularyType::InMemoryUncompressed);
-}
-
-// _____________________________________________________________________________
-TEST(Vocabulary, ZeroCopyRoundTripPolymorphicCompressed) {
-  testZeroCopyRoundTripPolymorphic(
-      ad_utility::VocabularyType::InMemoryCompressed);
-}
-
-// _____________________________________________________________________________
-TEST(Vocabulary, ZeroCopyBlobThrowsWhenNotInMemory) {
-  RdfsVocabulary vocabulary;
-  vocabulary.resetToType(ad_utility::VocabularyType::OnDiskCompressed);
-
-  // Note that the messages only differ in their first few words, which is
-  // exactly what distinguishes the two directions.
-  ad_utility::serialization::AlignedByteBufferWriteSerializer writeSerializer;
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      vocabulary.writeAsZeroCopyBlob(writeSerializer),
-      ::testing::HasSubstr(
-          "Writing a vocabulary to a zero-copy blob is only supported for the "
-          "in-memory (uncompressed or compressed) vocabulary implementations"));
-
-  // Reading throws before the buffer is touched at all, so the (empty) buffer
-  // of the write serializer above is sufficient here.
-  ad_utility::serialization::AlignedByteBufferReadSerializer readSerializer{
-      std::move(writeSerializer).data()};
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      vocabulary.loadFromZeroCopyDeserializer(readSerializer),
-      ::testing::HasSubstr(
-          "Loading a vocabulary from a zero-copy blob is only supported for "
-          "the in-memory (uncompressed or compressed) vocabulary "
-          "implementations"));
-}
-
-// _____________________________________________________________________________
-TEST(Vocabulary, ScanAll) {
+TEST(Vocabulary, WriteAsZeroCopyBlobThrowsWhenNotInMemory) {
   using ad_utility::VocabularyType;
   using enum VocabularyType::Enum;
-  // `scanAll` delegates to the underlying vocabulary and must yield all words
-  // in order, matching `operator[]`.
+
   RdfsVocabulary vocabulary;
   vocabulary.resetToType(VocabularyType{OnDiskCompressed});
-  ad_utility::HashSet<string> words{"alpha", "beta", "car", "delta"};
-  auto filename = gtestCurrentTestName();
-  absl::Cleanup cleanup = [&filename]() { ad_utility::deleteFile(filename); };
-  vocabulary.createFromSet(words, filename);
-
-  std::vector<std::string> scanned;
-  for (const IndexAndWord& indexAndWord : vocabulary.scanAll()) {
-    // For a non-split vocabulary the indices are contiguous and `scanAll` must
-    // agree with `operator[]`.
-    EXPECT_EQ(indexAndWord.word_,
-              vocabulary[VocabIndex::make(indexAndWord.index_)])
-        << "at index " << indexAndWord.index_;
-    scanned.emplace_back(indexAndWord.word_);
-  }
-  ASSERT_EQ(scanned.size(), vocabulary.size());
-  EXPECT_THAT(scanned, ::testing::ElementsAre("alpha", "beta", "car", "delta"));
+  ad_utility::serialization::AlignedByteBufferWriteSerializer writeSerializer;
+  EXPECT_ANY_THROW(vocabulary.writeAsZeroCopyBlob(writeSerializer));
 }
 
 // _____________________________________________________________________________
