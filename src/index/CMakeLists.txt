@@ -25,8 +25,7 @@ add_library(index
         PatternCreator.cpp ScanSpecification.cpp
         DeltaTriples.cpp TextScoring.cpp TextScoringEnum.cpp TextIndexReadWrite.cpp
         TextIndexBuilder.cpp GraphFilter.cpp IndexRebuilder.cpp GraphNameManager.cpp
-        IdTableUtils.cpp ExportIds.cpp LocalVocabContextImpl.cpp
+        IdTableUtils.cpp ExportIds.cpp LocalVocab.cpp
         CompressedExternalIdTableSorterInstantiations.cpp
-        InputFileSpecification.cpp
-        TripleComponentConversions.cpp)
-qlever_target_link_libraries(index qlever_util basicParser rdfParser vocabulary localVocab global)
+        InputFileSpecification.cpp)
+qlever_target_link_libraries(index util parser vocabulary global)
