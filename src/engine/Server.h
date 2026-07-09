@@ -48,6 +48,7 @@ CPP_concept QueryOrUpdate =
 // Forward declaration for testing.
 namespace serverTestHelpers {
 class ServerForTesting;
+class ServerForTesting;
 }
 
 //! The HTTP Server used.
@@ -67,9 +68,6 @@ class Server {
   FRIEND_TEST(ServerTest, adjustParsedQueryLimitOffset);
   FRIEND_TEST(ServerTest, configurePinnedResultWithName);
   FRIEND_TEST(IndexRebuilder, serverIntegration);
-  FRIEND_TEST(IndexRebuilder, serverIntegrationDroppedStateWarnings);
-  FRIEND_TEST(IndexRebuilder, serverIntegrationAutomaticRebuild);
-  FRIEND_TEST(IndexRebuilder, serverIntegrationKeepPreviousIndexDirs);
   friend serverTestHelpers::ServerForTesting;
 
  public:
