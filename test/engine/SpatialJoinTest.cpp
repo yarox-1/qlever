@@ -38,6 +38,7 @@
 #include "global/Id.h"
 #include "global/ValueId.h"
 #include "index/ExportIds.h"
+#include "index/LocalVocabEntry.h"
 #include "parser/PayloadVariables.h"
 #include "parser/SparqlParser.h"
 #include "rdfTypes/GeoSparqlHelpers.h"
