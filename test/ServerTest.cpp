@@ -375,6 +375,8 @@ TEST(ServerTest, configurePinnedResultWithName) {
   std::optional<std::string> noPinNamed = std::nullopt;
   Server::configurePinnedResultWithName(noPinNamed, std::nullopt, std::nullopt,
                                         true, *qec);
+  Server::configurePinnedResultWithName(noPinNamed, std::nullopt, std::nullopt,
+                                        true, *qec);
   EXPECT_FALSE(qec->pinResultWithName().has_value());
 
   // Test with pinNamed and valid access token - should set the pin name
@@ -382,7 +384,12 @@ TEST(ServerTest, configurePinnedResultWithName) {
   Server::configurePinnedResultWithName(pinNamed, std::nullopt, std::nullopt,
                                         true, *qec);
   ASSERT_TRUE(qec->pinResultWithName().has_value());
+  Server::configurePinnedResultWithName(pinNamed, std::nullopt, std::nullopt,
+                                        true, *qec);
+  ASSERT_TRUE(qec->pinResultWithName().has_value());
   EXPECT_EQ(qec->pinResultWithName().value().name_, "test_query_name");
+  EXPECT_EQ(qec->pinResultWithName().value().geoIndexSimplificationInMeters_,
+            std::nullopt);
   EXPECT_EQ(qec->pinResultWithName().value().geoIndexSimplificationInMeters_,
             std::nullopt);
 
@@ -412,17 +419,62 @@ TEST(ServerTest, configurePinnedResultWithName) {
   // Reset for next test
   qec->pinResultWithName() = std::nullopt;
 
-  // Pinning without a valid access token is rejected with 403 Forbidden.
-  expectForbiddenError(
-      [&] {
-        Server::configurePinnedResultWithName(pinNamed, std::nullopt,
-                                              std::nullopt, false, *qec);
-      },
+  // Test with pinNamed but invalid access token - should throw exception
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      Server::configurePinnedResultWithName(pinNamed, std::nullopt,
+                                            std::nullopt, false, *qec),
       testing::HasSubstr(
           "Pinning a result with a name requires a valid access token"));
 
   // Verify qec was not modified when exception was thrown
   EXPECT_FALSE(qec->pinResultWithName().has_value());
+}
+
+// _____________________________________________________________________________
+TEST(ServerTest, parsePinGeoIndexSimplification) {
+  // No value given - no simplification.
+  EXPECT_EQ(Server::parsePinGeoIndexSimplification(std::nullopt), std::nullopt);
+
+  // A valid positive number is parsed correctly.
+  EXPECT_THAT(Server::parsePinGeoIndexSimplification("10.5"),
+              ::testing::Optional(10.5));
+
+  // A non-numeric value throws.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      Server::parsePinGeoIndexSimplification("not-a-number"),
+      testing::HasSubstr(
+          "Invalid value for `pin-geo-index-simplification`: must be a "
+          "floating-point number of meters."));
+
+  // Negative and zero values are not rejected by the parser itself (that is
+  // left to the downstream consumer, see `GeoConverters::simplifyPolyline`).
+  EXPECT_THAT(Server::parsePinGeoIndexSimplification("-5"),
+              ::testing::Optional(-5.0));
+  EXPECT_THAT(Server::parsePinGeoIndexSimplification("0"),
+              ::testing::Optional(0.0));
+}
+
+// _____________________________________________________________________________
+TEST(ServerTest, describePinResultWithNameForLog) {
+  // No pinned name - nothing to describe.
+  EXPECT_EQ(Server::describePinResultWithNameForLog(std::nullopt, std::nullopt,
+                                                    std::nullopt),
+            "");
+
+  // Pinned name only.
+  EXPECT_EQ(Server::describePinResultWithNameForLog("myPin", std::nullopt,
+                                                    std::nullopt),
+            " [pin result with name \"myPin\"]");
+
+  // Pinned name and geo index, but no simplification.
+  EXPECT_EQ(
+      Server::describePinResultWithNameForLog("myPin", "geom", std::nullopt),
+      " [pin result with name \"myPin\" with geo index on ?geom]");
+
+  // Pinned name, geo index, and simplification.
+  EXPECT_EQ(Server::describePinResultWithNameForLog("myPin", "geom", 5.0),
+            " [pin result with name \"myPin\" with geo index on ?geom, "
+            "simplification=5m]");
 }
 
 // _____________________________________________________________________________

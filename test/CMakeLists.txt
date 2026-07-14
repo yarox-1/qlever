@@ -332,7 +332,9 @@ addLinkAndDiscoverTestNoLibs(GeoPointTest rdfTypes)
 
 addLinkAndDiscoverTest(GeoSparqlHelpersTest rdfTypes)
 
-addLinkAndDiscoverTest(GeoConvertersTest qlever_util)
+addLinkAndDiscoverTest(GeoSparqlHelpersTest util)
+
+addLinkAndDiscoverTest(GeoConvertersTest util)
 
 addLinkAndDiscoverTest(HttpUtilsTest qlever_util http)
 

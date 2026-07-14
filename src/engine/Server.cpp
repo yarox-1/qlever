@@ -322,6 +322,45 @@ std::string Server::describePinResultWithNameForLog(
 }
 
 // ____________________________________________________________________________
+std::optional<double> Server::parsePinGeoIndexSimplification(
+    const std::optional<std::string>& simplificationStr) {
+  if (!simplificationStr.has_value()) {
+    return std::nullopt;
+  }
+  try {
+    return std::stod(simplificationStr.value());
+  } catch (...) {
+    throw std::runtime_error(
+        "Invalid value for `pin-geo-index-simplification`: must be a "
+        "floating-point number of meters.");
+  }
+}
+
+// ____________________________________________________________________________
+std::string Server::describePinResultWithNameForLog(
+    const std::optional<std::string>& pinResultWithName,
+    const std::optional<std::string>& pinNamedGeoIndex,
+    std::optional<double> geoIndexSimplificationInMeters) {
+  if (!pinResultWithName.has_value()) {
+    return "";
+  }
+  // Describe the "with geo index on ?<var>" part (empty if `pinNamedGeoIndex`
+  // is not set).
+  std::string geoIndexDescription;
+  if (pinNamedGeoIndex.has_value()) {
+    std::string simplification =
+        geoIndexSimplificationInMeters
+            ? absl::StrCat(", simplification=",
+                           geoIndexSimplificationInMeters.value(), "m")
+            : "";
+    geoIndexDescription = absl::StrCat(
+        " with geo index on ?", pinNamedGeoIndex.value(), simplification);
+  }
+  return absl::StrCat(" [pin result with name \"", pinResultWithName.value(),
+                      "\"", geoIndexDescription, "]");
+}
+
+// ____________________________________________________________________________
 auto Server::prepareOperation(
     std::string_view operationName, std::string_view operationSPARQL,
     ad_utility::websocket::MessageSender messageSender,
@@ -355,36 +394,43 @@ auto Server::prepareOperation(
               << "\n"
               << ad_utility::truncateOperationString(operationSPARQL)
               << std::endl;
+  std::optional<std::string> pinGeoIndexSimplificationStr =
+      ad_utility::url_parser::checkParameter(
+          params, "pin-geo-index-simplification", {});
+  std::optional<double> geoIndexSimplificationInMeters =
+      parsePinGeoIndexSimplification(pinGeoIndexSimplificationStr);
+  AD_LOG_INFO << "Processing the following " << operationName
+              << (clientIp.empty() ? std::string{}
+                                   : absl::StrCat(" from ", clientIp))
+              << ":" << (pinResult ? " [pin result]" : "")
+              << (pinSubtrees ? " [pin subresults]" : "")
+              << describePinResultWithNameForLog(pinResultWithName,
+                                                 pinNamedGeoIndex,
+                                                 geoIndexSimplificationInMeters)
+              << "\n"
+              << ad_utility::truncateOperationString(operationSPARQL)
+              << std::endl;
   auto sharedMessageSender =
       std::make_shared<ad_utility::websocket::MessageSender>(
           std::move(messageSender));
-  // Return a factory rather than a ready-made context, so the caller can bind
-  // it to whichever snapshot is current when the operation runs (see
-  // `processUpdate`).
-  MakeQueryExecutionContext makeQec =
-      [this, sharedMessageSender = std::move(sharedMessageSender), pinSubtrees,
-       pinResult, pinResultWithName = std::move(pinResultWithName),
-       pinNamedGeoIndex = std::move(pinNamedGeoIndex),
-       geoIndexSimplificationInMeters,
-       accessTokenOk](SharedIndexAndView indexAndViews) {
-        auto qec = qlever().createQueryExecutionContext(
-            std::move(indexAndViews),
-            [sharedMessageSender](std::string json) {
-              (*sharedMessageSender)(std::move(json));
-            },
-            pinSubtrees, pinResult);
-        configurePinnedResultWithName(pinResultWithName, pinNamedGeoIndex,
-                                      geoIndexSimplificationInMeters,
-                                      accessTokenOk, *qec);
-        return qec;
-      };
-  return std::make_tuple(std::move(makeQec), std::move(cancellationHandle),
+  auto qec = qlever().createQueryExecutionContext(
+      std::move(indexAndViews),
+      [sharedMessageSender = std::move(sharedMessageSender)](std::string json) {
+        (*sharedMessageSender)(std::move(json));
+      },
+      pinSubtrees, pinResult);
+  configurePinnedResultWithName(pinResultWithName, pinNamedGeoIndex,
+                                geoIndexSimplificationInMeters, accessTokenOk,
+                                *qec);
+  return std::make_tuple(std::move(qec), std::move(cancellationHandle),
                          std::move(cancelTimeoutOnDestruction));
 }
 
 // _____________________________________________________________________________
 void Server::configurePinnedResultWithName(
     const std::optional<std::string>& pinResultWithName,
+    const std::optional<std::string>& pinNamedGeoIndex,
+    std::optional<double> geoIndexSimplificationInMeters, bool accessTokenOk,
     const std::optional<std::string>& pinNamedGeoIndex,
     std::optional<double> geoIndexSimplificationInMeters, bool accessTokenOk,
     QueryExecutionContext& qec) {
@@ -403,6 +449,8 @@ void Server::configurePinnedResultWithName(
     return Variable{absl::StrCat("?", pinNamedGeoIndex.value())};
   };
   qec.pinResultWithName() = QueryExecutionContext::PinResultWithName{
+      pinResultWithName.value(), getGeoCacheVar(),
+      geoIndexSimplificationInMeters};
       pinResultWithName.value(), getGeoCacheVar(),
       geoIndexSimplificationInMeters};
 }
