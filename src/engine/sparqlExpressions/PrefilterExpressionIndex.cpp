@@ -4,6 +4,7 @@
 // 2026        Robin Textor-Falconi <textorr@cs.uni-freiburg.de>, UFR
 // 2026        Hannah Bast <bast@cs.uni-freiburg.de>, UFR
 // 2026        Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2026        Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
@@ -274,6 +275,21 @@ static BlockMetadataRanges getNegationAwareUnionOfBlockRanges(
   return isNegated ? getIntersectionOfBlockRanges(r1, r2)
                    : getUnionOfBlockRanges(r1, r2);
 }
+
+// Combine `r1` and `r2`, which represent a semantic *disjunction* (`r1 || r2`)
+// of two sub-prefilters that have both already been evaluated with the same
+// `isNegated` flag. Without negation this is simply the union. Under negation,
+// De Morgan's law turns the disjunction into a conjunction of the (already
+// complemented) operands (`!(A || B) == !A && !B`), so the intersection is
+// returned instead. This is used by prefilters that keep the blocks of a
+// disjunction of datatype/value ranges, e.g. `isIri` (vocabulary IRIs *or*
+// encoded IRIs) and `isLiteral` (inlined *or* non-inlined literals).
+static BlockMetadataRanges getNegationAwareUnionOfBlockRanges(
+    const BlockMetadataRanges& r1, const BlockMetadataRanges& r2,
+    bool isNegated) {
+  return isNegated ? getIntersectionOfBlockRanges(r1, r2)
+                   : getUnionOfBlockRanges(r1, r2);
+}
 }  // namespace logicalOps
 }  // namespace detail
 
@@ -346,6 +362,8 @@ static std::string getDatatypeIsTypeStr(const IsDatatype isDtype) {
       return "Literal";
     case NUMERIC:
       return "Numeric";
+    case ENCODED_IRI:
+      return "EncodedIri";
     case ENCODED_IRI:
       return "EncodedIri";
     default:
@@ -709,9 +727,8 @@ BlockMetadataRanges IsDatatypeExpression<IsDatatype::IRI>::evaluateImpl(
   // in order. The smallest possible IRI is represented by "<>", we use its
   // corresponding ValueId later on as a lower bound.
   auto vocabIriRanges =
-      make<GreaterThanExpression>(
-          LVE::fromStringRepresentation("<>", index.getLocalVocabContext()))
-          ->evaluateImpl(index, idRange, blockRange, isNegated_);
+      make<GreaterThanExpression>(LVE::fromStringRepresentation("<>", context))
+          ->evaluateImpl(context, idRange, blockRange, isNegated_);
   // (2) Encoded IRIs: These sort *after* all vocabulary IRIs, so the `> <>`
   // prefilter above does not cover them and we have to add their datatype range
   // explicitly. Otherwise, blocks that consist entirely of encoded IRIs would
@@ -728,8 +745,8 @@ BlockMetadataRanges IsDatatypeExpression<IsDatatype::IRI>::evaluateImpl(
 //______________________________________________________________________________
 template <>
 BlockMetadataRanges IsDatatypeExpression<IsDatatype::ENCODED_IRI>::evaluateImpl(
-    [[maybe_unused]] const IndexImpl& index, const ValueIdSubrange& idRange,
-    BlockMetadataSpan blockRange,
+    [[maybe_unused]] const LocalVocabContext& context,
+    const ValueIdSubrange& idRange, BlockMetadataSpan blockRange,
     [[maybe_unused]] bool getTotalComplement) const {
   // Encoded IRIs are exactly the `ValueId`s of datatype `EncodedVal`.
   std::array datatypes{Datatype::EncodedVal};
@@ -754,6 +771,10 @@ BlockMetadataRanges IsDatatypeExpression<IsDatatype::LITERAL>::evaluateImpl(
           LVE::fromStringRepresentation("<>", index.getLocalVocabContext()))
           ->evaluateImpl(index, idRange, blockRange, isNegated_);
 
+  // `LITERAL = inlined || nonInlined` (an intersection under negation, see the
+  // helper for details).
+  return detail::logicalOps::getNegationAwareUnionOfBlockRanges(
+      inlinedRanges, nonInlinedRanges, isNegated_);
   // `LITERAL = inlined || nonInlined` (an intersection under negation, see the
   // helper for details).
   return detail::logicalOps::getNegationAwareUnionOfBlockRanges(
@@ -944,6 +965,7 @@ template class IsDatatypeExpression<IsDatatype::IRI>;
 template class IsDatatypeExpression<IsDatatype::BLANK>;
 template class IsDatatypeExpression<IsDatatype::LITERAL>;
 template class IsDatatypeExpression<IsDatatype::NUMERIC>;
+template class IsDatatypeExpression<IsDatatype::ENCODED_IRI>;
 template class IsDatatypeExpression<IsDatatype::ENCODED_IRI>;
 
 template class LogicalExpression<LogicalOperator::AND>;
