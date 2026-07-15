@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
+#include <filesystem>
 #include <fstream>
 #include <optional>
 #include <sstream>
@@ -28,11 +29,10 @@
 
 #include "./util/FileTestHelpers.h"
 #include "./util/GTestHelpers.h"
-#include "backports/filesystem.h"
 #include "util/ResourceMonitor.h"
 
 namespace {
-namespace fs = ql::filesystem;
+namespace fs = std::filesystem;
 using ad_utility::ResourceMonitor;
 using ad_utility::resource_monitor::CpuPercentTracker;
 using ad_utility::resource_monitor::cpuTimeSeconds;

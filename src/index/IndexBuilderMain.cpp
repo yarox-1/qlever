@@ -10,6 +10,7 @@
 
 #include <boost/program_options.hpp>
 #include <cstdint>
+#include <cstdint>
 #include <cstdlib>
 #include <exception>
 #include <iostream>
@@ -22,6 +23,7 @@
 #include "libqlever/Qlever.h"
 #include "util/ProgramOptionsHelpers.h"
 #include "util/ReadableNumberFacet.h"
+#include "util/ResourceMonitor.h"
 #include "util/ResourceMonitor.h"
 #include "util/json.h"
 
@@ -197,9 +199,6 @@ int main(int argc, char** argv) {
   bool noResourceUsageLog = false;
   uint32_t resourceUsageIntervalS = 1;
 
-  ad_utility::ParameterToProgramOptionFactory optionFactory{
-      &globalRuntimeParameters};
-
   boost::program_options::options_description boostOptions(
       "Options for qlever-index");
   auto add = [&boostOptions](auto&&... args) {
@@ -321,15 +320,6 @@ int main(int argc, char** argv) {
   add("resource-usage-interval-s",
       po::value(&resourceUsageIntervalS)->default_value(1),
       "The sampling interval of the resource-usage log in seconds.");
-  auto logLevelDescription = absl::StrCat(
-      "Runtime log level: FATAL, ERROR, WARN, INFO, DEBUG, TIMING, or TRACE. "
-      "Default is INFO. The compile-time level (",
-      LogLevel{LOGLEVEL}.toString(),
-      ") applies as an upper bound — messages above it are never emitted "
-      "regardless of this setting.");
-  add("log-level",
-      optionFactory.getProgramOption<&RuntimeParameters::logLevel_>(),
-      logLevelDescription.c_str());
 
   // Process command line arguments.
   po::variables_map optionsMap;
@@ -358,6 +348,13 @@ int main(int argc, char** argv) {
               << qlever::version::GitShortHash << EMPH_OFF << std::endl;
 
   try {
+    // Samples RSS and CPU usage for the duration of the build.
+    ad_utility::ResourceMonitor resourceMonitor;
+    if (!noResourceUsageLog) {
+      resourceMonitor.start(config.baseName_ + ".index.resource-usage-log.tsv",
+                            ad_utility::ResourceMonitor::Mode::Truncate,
+                            std::chrono::seconds{resourceUsageIntervalS});
+    }
     // Samples RSS and CPU usage for the duration of the build.
     ad_utility::ResourceMonitor resourceMonitor;
     if (!noResourceUsageLog) {

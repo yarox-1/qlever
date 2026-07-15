@@ -7,6 +7,7 @@
 
 #include <boost/program_options.hpp>
 #include <cstdint>
+#include <cstdint>
 #include <cstdlib>
 #include <iostream>
 #include <string>
@@ -23,8 +24,6 @@
 #include "util/ProgramOptionsHelpers.h"
 #include "util/ReadableNumberFacet.h"
 #include "util/ResourceMonitor.h"
-#include "util/http/HttpProxyConfig.h"
-#include "util/metrics/Metrics.h"
 
 using std::size_t;
 using std::string;
@@ -59,7 +58,6 @@ int main(int argc, char** argv) {
   bool noMetricsLog = false;
   bool noResourceUsageLog = false;
   uint32_t resourceUsageIntervalS = 2;
-  std::string rebuildIndexStrategy;
 
   ad_utility::ParameterToProgramOptionFactory optionFactory{
       &globalRuntimeParameters};
@@ -120,6 +118,13 @@ int main(int argc, char** argv) {
       "Disable the per-query metrics log. By default a JSONL log of query "
       "start/end events is written next to the index files "
       "(`<index-basename>.metrics-log.jsonl`).");
+  add("no-resource-usage-log", po::bool_switch(&noResourceUsageLog),
+      "Disable the resource-usage log. By default a TSV log of the RSS and "
+      "CPU usage of the server is written next to the index files "
+      "(`<index-basename>.server.resource-usage-log.tsv`).");
+  add("resource-usage-interval-s",
+      po::value(&resourceUsageIntervalS)->default_value(2),
+      "The sampling interval of the resource-usage log in seconds.");
   add("no-resource-usage-log", po::bool_switch(&noResourceUsageLog),
       "Disable the resource-usage log. By default a TSV log of the RSS and "
       "CPU usage of the server is written next to the index files "
@@ -303,73 +308,6 @@ int main(int argc, char** argv) {
               << " using git hash " << qlever::version::GitShortHash << EMPH_OFF
               << std::endl;
 
-  // Apply the `--set-runtime-parameter` assignments. This runs after
-  // `po::notify` above, so for parameters that can also be set by a dedicated
-  // option (like `--service-max-redirects`), the value given here wins. A bad
-  // name or value fails the startup with a readable message, before the index
-  // is loaded.
-  for (const auto& assignment : runtimeParameterAssignments) {
-    try {
-      globalRuntimeParameters.wlock()->setFromAssignment(assignment);
-    } catch (const std::exception& e) {
-      AD_LOG_ERROR << "Invalid argument to --set-runtime-parameter: "
-                   << e.what() << std::endl;
-      return EXIT_FAILURE;
-    }
-    AD_LOG_INFO << "Runtime parameter set from the command line: " << assignment
-                << std::endl;
-  }
-
-  // Read the proxy for outgoing requests (`SERVICE` and `LOAD`) from the
-  // environment. We do this eagerly so that a malformed proxy URL fails the
-  // startup with a readable message, instead of only surfacing on the first
-  // federated query. Only log if a proxy is actually configured, to not add
-  // noise for the common case.
-  try {
-    const auto& proxy = ad_utility::httpProxy::globalProxy();
-    if (proxy.has_value()) {
-      AD_LOG_INFO << "Proxy for outgoing HTTP requests: "
-                  << proxy->asStringForLogging() << std::endl;
-    }
-    // The uppercase `HTTP_PROXY` is deliberately ignored (following `curl`,
-    // see `HttpProxyConfig.h`), but silently doing so would be confusing, so
-    // leave a hint.
-    if (ad_utility::httpProxy::uppercaseHttpProxyIsSetButIgnored()) {
-      AD_LOG_INFO << "The environment variable `HTTP_PROXY` (uppercase) is "
-                     "set, but deliberately ignored; use the lowercase "
-                     "`http_proxy` to configure a proxy for outgoing requests"
-                  << std::endl;
-    }
-  } catch (const std::exception& e) {
-    AD_LOG_ERROR << "Invalid value of the `http_proxy` environment variable: "
-                 << e.what() << std::endl;
-    return EXIT_FAILURE;
-  }
-
-  // Resolve the `--rebuild-index-strategy` option. A bad value fails the
-  // startup with a readable message, before the index is loaded.
-  try {
-    config.rebuildIndexStrategy_ =
-        qlever::RebuildIndexStrategy::parse(rebuildIndexStrategy);
-  } catch (const std::exception& e) {
-    AD_LOG_ERROR << "Invalid argument to --rebuild-index-strategy: " << e.what()
-                 << std::endl;
-    return EXIT_FAILURE;
-  }
-  if (config.rebuildIndexStrategy_.has_value()) {
-    AD_LOG_INFO << "Automatic index rebuild enabled (--rebuild-index-strategy "
-                << rebuildIndexStrategy << ")" << std::endl;
-  }
-
-  // The `--rebuild-keep-previous-index-dirs` option is parsed directly into
-  // `config.keepPreviousIndexDirs_` (a bad value fails the startup with a
-  // readable message, via the `validate` hook in `EnumWithStrings.h`).
-  if (config.keepPreviousIndexDirs_ != qlever::KeepPreviousIndexDirs::All) {
-    AD_LOG_INFO << "Cleanup of previous index directories after each rebuild "
-                   "enabled (--rebuild-keep-previous-index-dirs "
-                << config.keepPreviousIndexDirs_ << ")" << std::endl;
-  }
-
   try {
     // Samples RSS and CPU usage, starting before the index is loaded.
     ad_utility::ResourceMonitor resourceMonitor;
@@ -378,7 +316,6 @@ int main(int argc, char** argv) {
                             ad_utility::ResourceMonitor::Mode::Append,
                             std::chrono::seconds{resourceUsageIntervalS});
     }
-    auto metricsReader = ad_utility::metrics::initialize(metricsEnabled);
     Server server(port, numSimultaneousQueries, std::move(accessToken), config,
                   noAccessCheck, std::move(metricsReader));
     // Per-query jsonl metrics log, written next to the index files. On by
@@ -388,6 +325,8 @@ int main(int argc, char** argv) {
     }
     server.run();
   } catch (const std::exception& e) {
+    // Reached if opening the metrics log fails; server.run() otherwise
+    // handles its own exceptions.
     // Reached if opening the metrics log fails; server.run() otherwise
     // handles its own exceptions.
     AD_LOG_ERROR << e.what() << std::endl;

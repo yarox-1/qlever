@@ -583,10 +583,6 @@ addLinkAndDiscoverTest(FilesystemHelpersTest qlever_util)
 
 addLinkAndDiscoverTest(LogTest)
 
-addLinkAndDiscoverTest(QueryEventLogTest qlever_util)
+addLinkAndDiscoverTest(QueryEventLogTest util)
 
-addLinkAndDiscoverTest(MetricsTest metrics)
-
-addLinkAndDiscoverTest(InstrumentedExecutorTest metrics)
-
-addLinkAndDiscoverTest(ResourceMonitorTest qlever_util)
+addLinkAndDiscoverTest(ResourceMonitorTest util)
