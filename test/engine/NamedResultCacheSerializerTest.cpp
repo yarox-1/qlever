@@ -7,6 +7,8 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <filesystem>
+
 #include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
@@ -93,6 +95,12 @@ TEST_F(NamedResultCacheSerializerTest, ValueSerialization) {
   ASSERT_THAT(deserializedValue.result_,
               ::testing::VariantWith<std::shared_ptr<const IdTable>>(
                   ::testing::Ne(nullptr)));
+  // Check the result pointer is valid (the non-aligned serializer used here
+  // always deserializes into the owning `shared_ptr<const IdTable>`
+  // alternative, never a zero-copy view).
+  ASSERT_THAT(deserializedValue.result_,
+              ::testing::VariantWith<std::shared_ptr<const IdTable>>(
+                  ::testing::Ne(nullptr)));
 
   // Check the local vocab.
   auto deserWords = deserializedValue.localVocab_.getAllWordsForTesting();
@@ -102,6 +110,8 @@ TEST_F(NamedResultCacheSerializerTest, ValueSerialization) {
               deserWords[i].toStringRepresentation());
   }
   // Check the result
+  EXPECT_THAT(ExplicitIdTableOperation::viewOf(deserializedValue.result_),
+              matchesIdTable(table));
   EXPECT_THAT(ExplicitIdTableOperation::viewOf(deserializedValue.result_),
               matchesIdTable(table));
   EXPECT_THAT(deserializedValue.varToColMap_,
@@ -136,8 +146,7 @@ TEST_F(NamedResultCacheSerializerTest, ValueSerializationZeroCopy) {
 
   NamedResultCache::Value deserializedValue;
   deserializedValue.allocatorForSerialization_ = alloc_;
-  deserializedValue.contextForSerialization_ =
-      &qec_->getIndex().getLocalVocabContext();
+  deserializedValue.contextForSerialization_ = &qec_->getIndex().getImpl();
   readSerializer >> deserializedValue;
 
   ASSERT_TRUE(
@@ -212,12 +221,16 @@ TEST_F(NamedResultCacheSerializerTest, CacheSerialization) {
   ASSERT_NE(result1, nullptr);
   EXPECT_THAT(ExplicitIdTableOperation::viewOf(result1->result_),
               matchesIdTable(table1));
+  EXPECT_THAT(ExplicitIdTableOperation::viewOf(result1->result_),
+              matchesIdTable(table1));
   EXPECT_THAT(result1->varToColMap_, UnorderedElementsAreArray(varColMap1));
   EXPECT_THAT(result1->resultSortedOn_, ElementsAre(0));
   EXPECT_EQ(result1->cacheKey_, "key1");
 
   auto result2 = cache2.get("query-2");
   ASSERT_NE(result2, nullptr);
+  EXPECT_THAT(ExplicitIdTableOperation::viewOf(result2->result_),
+              matchesIdTable(table2));
   EXPECT_THAT(ExplicitIdTableOperation::viewOf(result2->result_),
               matchesIdTable(table2));
   EXPECT_THAT(result2->varToColMap_, UnorderedElementsAreArray(varColMap2));
@@ -242,6 +255,42 @@ TEST_F(NamedResultCacheSerializerTest, EmptyCacheSerialization) {
     return cache2;
   }();
   EXPECT_EQ(cache2.numEntries(), 0);
+}
+
+// Test that `readFromSerializer` throws a helpful error message when the
+// magic byte or the format version of the input do not match, instead of
+// silently misinterpreting unrelated or incompatible data.
+TEST_F(NamedResultCacheSerializerTest, WrongMagicByteOrFormatVersionThrows) {
+  NamedResultCache cache;
+  ByteBufferWriteSerializer writer;
+  cache.writeToSerializer(writer);
+  auto data = std::move(writer).data();
+  ASSERT_GE(data.size(), 3u);
+
+  // Corrupt the magic byte, which is the very first byte of the serialized
+  // data.
+  auto dataWithWrongMagicByte = data;
+  dataWithWrongMagicByte[0] = static_cast<char>(~dataWithWrongMagicByte[0]);
+  ByteBufferReadSerializer readerWithWrongMagicByte{
+      std::move(dataWithWrongMagicByte)};
+  NamedResultCache cacheForWrongMagicByte;
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      cacheForWrongMagicByte.readFromSerializer(
+          readerWithWrongMagicByte, ad_utility::makeUnlimitedAllocator<Id>(),
+          qec_->getLocalVocabContext()),
+      ::testing::HasSubstr("magic byte"));
+
+  // Corrupt the format version, which directly follows the magic byte.
+  auto dataWithWrongVersion = data;
+  dataWithWrongVersion[1] = static_cast<char>(dataWithWrongVersion[1] + 1);
+  ByteBufferReadSerializer readerWithWrongVersion{
+      std::move(dataWithWrongVersion)};
+  NamedResultCache cacheForWrongVersion;
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      cacheForWrongVersion.readFromSerializer(
+          readerWithWrongVersion, ad_utility::makeUnlimitedAllocator<Id>(),
+          qec_->getLocalVocabContext()),
+      ::testing::HasSubstr("format version"));
 }
 
 // Test that `readFromSerializer` throws a helpful error message when the
