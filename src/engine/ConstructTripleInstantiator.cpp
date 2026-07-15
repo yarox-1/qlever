@@ -120,7 +120,8 @@ std::string formatTerm(const EvaluatedTermData& term, bool includeDataType) {
 
 // _____________________________________________________________________________
 std::string formatTriple(const EvaluatedTriple& evaluatedTriple,
-                         const ad_utility::MediaType& format) {
+                         const ad_utility::MediaType& format,
+                         bool includeDataType) {
   // TODO<ms2144>: take a look where we can eliminate string constructions here.
   using enum ad_utility::MediaType;
   static constexpr std::array supportedFormats{turtle, csv, tsv, ntriples};
