@@ -83,20 +83,6 @@ CPP_template(typename UnderlyingVocabulary,
         toStringView(underlyingVocabulary_[idx]), getDecoderIdx(idx));
   }
 
-  // Wrap the underlying vocabulary's `scanAll` (which reads the compressed
-  // words in batches) and decompress each word. `scanAll()` is expected to
-  // yield `IndexAndWord` elements, so we have to apply a transformation at the
-  // end.
-  auto scanAll() const {
-    return ad_utility::CachingTransformInputRange(
-        underlyingVocabulary_.scanAll(),
-        [this, buffer = std::string{}](const IndexAndWord& compressed) mutable {
-          const auto& [index, word] = compressed;
-          buffer = compressionWrapper_.decompress(word, getDecoderIdx(index));
-          return IndexAndWord{index, buffer};
-        });
-  }
-
   //____________________________________________________________________________
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
     return ad_utility::vocabulary::sequentialLookupBatch(*this, indices);

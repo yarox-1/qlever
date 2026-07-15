@@ -6,6 +6,14 @@
 
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
+// Copyright 2025-2026 The QLever Authors, in particular:
+// 2026 Marvin Stoetzel <marvin.stoetzel@email.uni-freiburg.de>, UFR
+// 2025-2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "index/vocabulary/PolymorphicVocabulary.h"
 
@@ -36,13 +44,6 @@ size_t PolymorphicVocabulary::size() const {
 // _____________________________________________________________________________
 std::string PolymorphicVocabulary::operator[](uint64_t i) const {
   return std::visit([i](auto& vocab) { return std::string{vocab[i]}; }, vocab_);
-}
-
-// _____________________________________________________________________________
-VocabularyScanRange PolymorphicVocabulary::scanAll() const {
-  return std::visit(
-      [](const auto& vocab) { return VocabularyScanRange{vocab.scanAll()}; },
-      vocab_);
 }
 
 // _____________________________________________________________________________

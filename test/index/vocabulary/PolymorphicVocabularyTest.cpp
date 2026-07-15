@@ -82,6 +82,17 @@ void setupVocab(PolymorphicVocabulary& vocab, VocabularyType::Enum vocabType,
   vocabulary_test::writeWordsAndFinish(*writerPtr);
   vocab.open(filename, type);
 }
+
+// Write a small vocabulary of the given `vocabType` to `filename` and open it
+// into `vocab`. The exact words don't matter (they only have to be sorted, as
+// the underlying vocabularies require sorted input at write time).
+void setupVocab(PolymorphicVocabulary& vocab, VocabularyType::Enum vocabType,
+                const std::string& filename) {
+  VocabularyType type{vocabType};
+  auto writerPtr = PolymorphicVocabulary::makeDiskWriterPtr(filename, type);
+  vocabulary_test::writeWordsAndFinish(*writerPtr);
+  vocab.open(filename, type);
+}
 }  // namespace
 
 // Test the general functionality of the `PolymorphicVocabulary` for all the

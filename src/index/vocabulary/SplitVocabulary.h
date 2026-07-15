@@ -186,12 +186,6 @@ class SplitVocabulary {
         underlying_[marker]);
   }
 
-  // Iterate over all words of all underlying vocabularies, one after the other,
-  // together with their global (marker-encoded) index.
-  auto scanAll() const {
-    return scanAllImpl(std::make_index_sequence<numberOfVocabs>{});
-  }
-
   //____________________________________________________________________________
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
     return ad_utility::vocabulary::sequentialLookupBatch(*this, indices);

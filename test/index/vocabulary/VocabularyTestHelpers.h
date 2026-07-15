@@ -9,7 +9,10 @@
 
 #include <array>
 
+#include <array>
+
 #include "../../util/GTestHelpers.h"
+#include "backports/span.h"
 #include "backports/span.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/Exception.h"
@@ -255,6 +258,7 @@ auto testAccessOperatorForUnorderedVocabulary(F createVocabulary) {
 // given comparator.
 template <typename F, typename C>
 auto testEmptyVocabularyWithComparator(F&& createVocabulary, C comparator) {
+auto testEmptyVocabularyWithComparator(F&& createVocabulary, C comparator) {
   auto vocab = createVocabulary(std::vector<std::string>{});
   ASSERT_EQ(0u, vocab.size());
   auto expected = WordAndIndex::end();
@@ -270,30 +274,6 @@ template <typename F>
 auto testEmptyVocabulary(F createVocabulary) {
   testEmptyVocabularyWithComparator(createVocabulary, std::less<>{});
   testEmptyVocabularyWithComparator(createVocabulary, std::greater<>{});
-}
-
-// Collect all words that the given `scanAll` result yields into a vector. This
-// is a template because the different vocabularies return different (concrete
-// or type-erased `VocabularyScanRange`) range types from `scanAll`.
-template <typename Range>
-std::vector<std::string> scanAllToVector(Range&& range) {
-  std::vector<std::string> result;
-  for (const IndexAndWord& indexAndWord : range) {
-    result.emplace_back(indexAndWord.word_);
-  }
-  return result;
-}
-
-// Collect all `{index, word}` pairs that the given `scanAll` result yields into
-// a vector.
-template <typename Range>
-std::vector<std::pair<uint64_t, std::string>> scanAllToIndexAndWordVector(
-    Range&& range) {
-  std::vector<std::pair<uint64_t, std::string>> result;
-  for (const IndexAndWord& indexAndWord : range) {
-    result.emplace_back(indexAndWord.index_, std::string{indexAndWord.word_});
-  }
-  return result;
 }
 
 // The default set of words written by `writeWordsAndFinish`.

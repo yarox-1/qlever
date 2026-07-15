@@ -7,13 +7,21 @@
 //
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
+// Copyright 2022 - 2026 The QLever Authors, in particular:
+//
+// 2022-2026 Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de), UFR
+// 2026 Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include <absl/cleanup/cleanup.h>
 #include <absl/strings/str_cat.h>
-#include <gmock/gmock.h>
+#include <gtest/gtest.h>
 
 #include "../../util/GTestHelpers.h"
-#include "../../util/MmapVectorLegacyFormat.h"
 #include "./VocabularyTestHelpers.h"
 #include "backports/algorithm.h"
 #include "index/vocabulary/VocabularyOnDisk.h"
@@ -25,6 +33,7 @@ namespace {
 using namespace vocabulary_test;
 
 // Store a `VocabularyOnDisk` and read it back from file. For each instance of
+// Store a `VocabularyOnDisk` and read it back from file. For each instance of
 // `VocabularyCreator` that exists at the same time, a different filename has to
 // be chosen.
 class VocabularyCreator {
@@ -35,6 +44,19 @@ class VocabularyCreator {
   explicit VocabularyCreator(std::string filename)
       : vocabFilename_{std::move(filename)} {
     ad_utility::deleteFile(vocabFilename_, false);
+  }
+  // Move-only: a moved-from creator has an empty filename and deletes nothing.
+  VocabularyCreator(VocabularyCreator&& other) noexcept
+      : vocabFilename_{std::exchange(other.vocabFilename_, {})} {}
+  VocabularyCreator& operator=(VocabularyCreator&&) =
+      delete;  // not needed (TODO: why?)
+  VocabularyCreator(const VocabularyCreator&) = delete;
+  VocabularyCreator& operator=(const VocabularyCreator&) = delete;
+
+  ~VocabularyCreator() {
+    if (!vocabFilename_.empty()) {
+      ad_utility::deleteFile(vocabFilename_);
+    }
   }
   // Move-only: a moved-from creator has an empty filename and deletes nothing.
   VocabularyCreator(VocabularyCreator&& other) noexcept
@@ -116,6 +138,46 @@ VocabularyOnDiskHandle createVocabularyFromWords(
 auto createVocabulary() {
   return [c = VocabularyCreator{absl::StrCat(gtestCurrentTestName(), ".dat")}](
              auto&&... args) mutable {
+// Owns a `VocabularyOnDisk` together with the `VocabularyCreator` that manages
+// its backing file, so the file lives as long as the vocabulary reading from
+// it.
+class VocabularyOnDiskHandle {
+ public:
+  VocabularyOnDiskHandle(std::string filename,
+                         const std::vector<std::string>& words)
+      : creator_{std::move(filename)},
+        vocabulary_{creator_.createVocabulary(words)} {}
+
+  // Non-copyable/movable: a copy would give two `creator_`s the same file, so
+  // both destructors would unlink it (double free).
+  VocabularyOnDiskHandle(const VocabularyOnDiskHandle&) = delete;
+  VocabularyOnDiskHandle& operator=(const VocabularyOnDiskHandle&) = delete;
+  VocabularyOnDiskHandle(VocabularyOnDiskHandle&&) = delete;
+  VocabularyOnDiskHandle& operator=(VocabularyOnDiskHandle&&) = delete;
+
+ private:
+  // `vocabulary_` is declared after `creator_`, because the `vocabulary_`
+  // should be destroyed before the `creator_`: the `vocabulary_` must be torn
+  // down before the `creator_` unlinks the file.
+  VocabularyCreator creator_;
+  VocabularyOnDisk vocabulary_;
+
+ public:
+  // Access the underlying vocabulary transparently, so call sites can treat
+  // the handle like the `VocabularyOnDisk` it wraps.
+  VocabularyOnDisk& operator*() { return vocabulary_; }
+  VocabularyOnDisk* operator->() { return &vocabulary_; }
+};
+
+VocabularyOnDiskHandle createVocabularyFromWords(
+    const std::vector<std::string>& words) {
+  return VocabularyOnDiskHandle{absl::StrCat(gtestCurrentTestName(), ".dat"),
+                                words};
+}
+
+auto createVocabulary() {
+  return [c = VocabularyCreator{absl::StrCat(gtestCurrentTestName(), ".dat")}](
+             auto&&... args) mutable {
     return c.createVocabulary(AD_FWD(args)...);
   };
 }
@@ -124,35 +186,20 @@ VocabularyOnDiskHandle createExampleVocabulary() {
   return createVocabularyFromWords({"alpha", "delta", "beta", "42", "gamma"});
 }
 
-// Create a `VocabularyOnDisk` from `words` and assert that `scanAll` yields
-// exactly those words in order: both as bare words and as `IndexAndWord`s with
-// contiguous indices `0, 1, 2, ...` (also across batch boundaries).
-void expectScanAllYields(const std::vector<std::string>& words) {
-  VocabularyCreator creator{gtestCurrentTestName()};
-  auto vocabulary = creator.createVocabulary(words);
-
-  EXPECT_THAT(scanAllToVector(vocabulary.scanAll()),
-              ::testing::ElementsAreArray(words));
-
-  auto indexAndWords = scanAllToIndexAndWordVector(vocabulary.scanAll());
-  ASSERT_EQ(indexAndWords.size(), words.size());
-  for (size_t i = 0; i < words.size(); ++i) {
-    EXPECT_EQ(indexAndWords[i].first, i) << "at index " << i;
-    EXPECT_EQ(indexAndWords[i].second, words[i]) << "at index " << i;
-  }
-}
-
 }  // namespace
 
 TEST(VocabularyOnDisk, LowerUpperBoundStdLess) {
+  testUpperAndLowerBoundWithStdLess(createVocabulary());
   testUpperAndLowerBoundWithStdLess(createVocabulary());
 }
 
 TEST(VocabularyOnDisk, LowerUpperBoundNumeric) {
   testUpperAndLowerBoundWithNumericComparator(createVocabulary());
+  testUpperAndLowerBoundWithNumericComparator(createVocabulary());
 }
 
 TEST(VocabularyOnDisk, AccessOperator) {
+  testAccessOperatorForUnorderedVocabulary(createVocabulary());
   testAccessOperatorForUnorderedVocabulary(createVocabulary());
 }
 
@@ -161,9 +208,11 @@ TEST(VocabularyOnDisk, AccessOperatorWithNonContiguousIds) {
                                  "alpha", "\n\1\t", "222",    "1111"};
   std::vector<uint64_t> ids{2, 4, 8, 16, 17, 19, 42, 42 * 42 + 7};
   testAccessOperatorForUnorderedVocabulary(createVocabulary());
+  testAccessOperatorForUnorderedVocabulary(createVocabulary());
 }
 
 TEST(VocabularyOnDisk, EmptyVocabulary) {
+  testEmptyVocabulary(createVocabulary());
   testEmptyVocabulary(createVocabulary());
 }
 
@@ -223,43 +272,6 @@ TEST(VocabularyOnDisk, ReadLegacyMmapVectorOffsetsFormat) {
   for (size_t i = 0; i < words.size(); ++i) {
     EXPECT_EQ(vocabulary[i], words[i]) << "at index " << i;
   }
-}
-
-// _____________________________________________________________________________
-TEST(VocabularyOnDisk, ScanAll) {
-  // A basic scan over many small words (fits into a single batch).
-  std::vector<std::string> words;
-  for (size_t i = 0; i < 3000; ++i) {
-    words.push_back(absl::StrCat("word", i, std::string(i % 7, 'x')));
-  }
-  expectScanAllYields(words);
-}
-
-// _____________________________________________________________________________
-TEST(VocabularyOnDisk, ScanAllEmptyVocabulary) {
-  VocabularyCreator creator{gtestCurrentTestName()};
-  auto vocabulary = creator.createVocabulary({});
-  auto range = vocabulary.scanAll();
-  EXPECT_FALSE(range.get().has_value());
-}
-
-// _____________________________________________________________________________
-TEST(VocabularyOnDisk, ScanAllByteLimitForcesMultipleBatches) {
-  // `scanAll` caps a batch's word data at
-  // `VOCABULARY_SCAN_MAX_WORD_DATA_PER_BATCH` (10 MB). Four words of 3 MB each
-  // (12 MB total) therefore don't fit into a single batch: the byte limit (not
-  // the word-count limit) forces a batch boundary after three words.
-  constexpr size_t wordSize = 3'000'000;
-  expectScanAllYields({std::string(wordSize, 'a'), std::string(wordSize, 'b'),
-                       std::string(wordSize, 'c'), std::string(wordSize, 'd')});
-}
-
-// _____________________________________________________________________________
-TEST(VocabularyOnDisk, ScanAllSingleWordExceedsLimit) {
-  // A single word larger than `VOCABULARY_SCAN_MAX_WORD_DATA_PER_BATCH` (10 MB)
-  // must still be scanned; it is returned in a batch of its own even though it
-  // exceeds the limit, and the surrounding small words are unaffected.
-  expectScanAllYields({"before", std::string(11'000'000, 'x'), "after"});
 }
 
 // A `lookupBatch` result must equal the individual `vocab[]` lookups for the
