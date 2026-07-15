@@ -390,63 +390,14 @@ class Qlever {
   // `Server` actually imposes time limits and then executes the queries right
   // away), but should be addressed in the future once the timeout management
   // also is moved into the `QLever` class.
-  PlannedQuery planQuery(
-      ParsedQuery&& parsedQuery, std::optional<TimeLimit> timeLimit,
-      QueryExecutionContext& qec, SharedCancellationHandle handle,
-      boost::optional<const ad_utility::Timer&> requestTimer =
-          boost::none) const;
-
-  // Parse and plan the given `query` (see `planQuery` above; despite the
-  // name, `query` may also be a SPARQL update operation).
-  // Run the query planner on `parsedQuery`. Despite the name, `ParsedQuery`
-  // is also used to represent SPARQL update operations (see
-  // ParsedQuery::hasUpdateClause()); this function handles both cases
-  // uniformly.
-  //
-  // If `requestTimer` is set, the elapsed time of that timer at the end of
-  // query planning is stored in the query's runtime information as
-  // `timeQueryPlanning`. This information can be accessed via the
-  // query execution tree's root operation.
-  //
-  // TODO<joka921,damekt> The `timeLimit` is currently only used for
-  // non-cancelable operations (in particular sorting). The time limit applies
-  // from the time this function is called until the execution of the query
-  // has finished. This might be very unintuitive when the `PlannedQuery` is
-  // stored for later execution. This is not an issue for now (only the
-  // `Server` actually imposes time limits and then executes the queries right
-  // away), but should be addressed in the future once the timeout management
-  // also is moved into the `QLever` class.
   PlannedQuery planQuery(ParsedQuery&& parsedQuery, QueryExecutionContext& qec,
                          SharedCancellationHandle handle,
                          std::optional<TimeLimit> timeLimit,
                          boost::optional<const ad_utility::Timer&>
                              requestTimer = boost::none) const;
 
-  // Plan a query that was parsed by `parseQuery` (or bundled by
-  // `bindParsedQuery`, both see below). The query is planned against the
-  // `QueryExecutionContext` that `parsedQuery` carries, so the two can not get
-  // out of sync. Implemented in terms of the `planQuery` overload above.
-  //
-  // For the semantics of `handle`, `timeLimit`, and `requestTimer`, see
-  // `planQuery` above.
-  PlannedQuery planQuery(
-      ParsedQueryAndContext parsedQuery,
-      SharedCancellationHandle handle =
-          std::make_shared<ad_utility::CancellationHandle<>>(),
-      std::optional<TimeLimit> timeLimit = std::nullopt,
-      boost::optional<const ad_utility::Timer&> requestTimer =
-          boost::none) const;
-
-  // Parse the given `query` (despite the name, `query` may also be a SPARQL
-  // update operation) and return it together with the
-  // `QueryExecutionContext` to plan and execute it against, see
-  // `ParsedQueryAndContext`.
-  //
-  // This is the first half of `parseAndPlanQuery`, the second half being the
-  // `planQuery` overload above. Calling the two separately is useful to inspect
-  // or modify the `ParsedQuery` before it is planned, to measure the time for
-  // the parsing and the planning separately, and to reuse a parsed query (see
-  // below).
+  // Parse and plan the given `query` (see `planQuery` above; despite the
+  // name, `query` may also be a SPARQL update operation).
   //
   // NOTES: This is useful as a separate function for the following reasons.
   //
@@ -470,10 +421,12 @@ class Qlever {
   PlannedQuery parseAndPlanQuery(
       std::string query, const std::vector<DatasetClause>& datasetClauses = {},
       SharedCancellationHandle handle =
+      SharedCancellationHandle handle =
           std::make_shared<ad_utility::CancellationHandle<>>(),
       std::optional<TimeLimit> timeLimit = std::nullopt,
       boost::optional<const ad_utility::Timer&> requestTimer = boost::none,
-      std::function<void(std::string)> updateCallback = ad_utility::noop,
+      std::function<void(std::string)> updateCallback =
+          [](std::string) { /* the default is a noop*/ },
       bool pinSubtrees = false, bool pinResult = false) const;
 
   // Run the given parsed and planned query. The result is returned as a
@@ -513,6 +466,19 @@ class Qlever {
 
   // Write a new materialized view with `name` to disk and store the result of
   // `query`.
+  //
+  // `requestTimer`, `timeLimit`, and `handle` are forwarded to `planQuery`
+  // (see there for their exact semantics). If omitted, the query is planned
+  // and executed without a timer, without a time limit, and with a fresh,
+  // never-triggered cancellation handle, i.e. it always runs to completion.
+  void writeMaterializedView(
+      std::string name, std::string query,
+      const std::vector<DatasetClause>& datasetClauses = {},
+      SharedCancellationHandle handle =
+          std::make_shared<ad_utility::CancellationHandle<>>(),
+      std::optional<TimeLimit> timeLimit = std::nullopt,
+      boost::optional<const ad_utility::Timer&> requestTimer =
+          boost::none) const;
   //
   // `requestTimer`, `timeLimit`, and `handle` are forwarded to `planQuery`
   // (see there for their exact semantics). If omitted, the query is planned

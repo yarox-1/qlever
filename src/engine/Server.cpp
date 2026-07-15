@@ -662,10 +662,19 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     // assumes that the access token has already been checked. Note that storing
     // the coroutine in a variable first and then awaiting it is required due to
     // lifetime issues on certain compilers.
+    // Call `Qlever::writeMaterializedView` with the extracted parameters. This
+    // assumes that the access token has already been checked. Note that storing
+    // the coroutine in a variable first and then awaiting it is required due to
+    // lifetime issues on certain compilers.
     auto cancellationHandle =
         std::make_shared<ad_utility::CancellationHandle<>>();
     auto coroutine = computeInNewThread(
         queryThreadPool_,
+        [name, query, requestTimer, cancellationHandle, timeLimit,
+         this]() mutable {
+          qlever().writeMaterializedView(
+              name.value(), std::move(query.query_), query.datasetClauses_,
+              std::move(cancellationHandle), timeLimit.value(), requestTimer);
         [name, query, requestTimer, cancellationHandle, timeLimit,
          this]() mutable {
           qlever().writeMaterializedView(
@@ -946,11 +955,11 @@ std::pair<bool, bool> Server::determineResultPinning(
 
 // ____________________________________________________________________________
 Server::PlannedQuery Server::planQuery(
-    ParsedQuery&& operation, const ad_utility::Timer& requestTimer,
-    TimeLimit timeLimit, QueryExecutionContext& qec,
-    ad_utility::SharedCancellationHandle handle) const {
+    ParsedQuery&& operation, QueryExecutionContext& qec,
+    ad_utility::SharedCancellationHandle handle, TimeLimit timeLimit,
+    const ad_utility::Timer& requestTimer) const {
   PlannedQuery plannedQuery = qlever().planQuery(
-      std::move(operation), timeLimit, qec, std::move(handle), requestTimer);
+      std::move(operation), qec, std::move(handle), timeLimit, requestTimer);
 
   const auto& qet = plannedQuery.queryExecutionTree();
   const auto& runtimeInfoWholeQuery =
@@ -1229,6 +1238,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
        &cancellationHandle]() -> std::optional<PlannedQuery> {
         return this->planQuery(std::move(query), qec, cancellationHandle,
                                timeLimit, requestTimer);
+        return this->planQuery(std::move(query), qec, cancellationHandle,
+                               timeLimit, requestTimer);
       },
       cancellationHandle);
   plannedQuery = co_await std::move(coroutine);
@@ -1419,6 +1430,9 @@ CPP_template_def(typename RequestT, typename ResponseT)(
                 }
                 tracer.endTrace("updateMetadata");
                 tracer.beginTrace("planning");
+                plannedUpdate =
+                    planQuery(std::move(update), qec, cancellationHandle,
+                              timeLimit, requestTimer);
                 plannedUpdate =
                     planQuery(std::move(update), qec, cancellationHandle,
                               timeLimit, requestTimer);
@@ -1679,39 +1693,14 @@ Server::createMessageSender<http::request<http::string_body>>(
     std::string_view);
 
 // _____________________________________________________________________________
-Awaitable<qlever::IndexRebuildConfig> Server::rebuildIndex(
-    std::optional<std::string> rebuildTmpDir,
-    std::optional<std::string> rebuildPreviousIndexDir) {
-  // There is no mechanism to actually cancel the handle.
-  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+Awaitable<void> Server::rebuildIndex(const std::string& indexBaseName) {
   auto indexAndViews = indexAndViewsSnapshot();
-  auto& [index, oldManager] = *indexAndViews;
-
-  // Turn the two directories that can be set via command parameters into the
-  // base names of the indexes involved in the rebuild. The new index ends up at
-  // the base name `index` is currently served from (which is the base name the
-  // server was started on, because a rebuild re-anchors the new index to
-  // exactly that place, see `Qlever::moveRebuiltIndexIntoPlace`), so that a
-  // later restart loads it.
-  auto config = qlever::Qlever::makeIndexRebuildConfig(
-      index, std::move(rebuildTmpDir), std::move(rebuildPreviousIndexDir));
-
-  // Warn if state that won't carry over to the rebuilt index was previously
-  // loaded: the new index never calls `addTextFromOnDiskIndex()` and is paired
-  // with a fresh, empty `MaterializedViewsManager`.
-  if (index.getNofTextRecords() > 0) {
-    AD_LOG_WARN << "A text index was loaded for the current index, but text "
-                   "search will no longer work after the rebuild completes. "
-                   "Restart the server using the original index to re-enable "
-                   "text search."
-                << std::endl;
-  }
-  if (oldManager.hasLoadedViews()) {
-    AD_LOG_WARN
-        << "Materialized views were loaded for the current index, but they "
-           "will no longer be available after the rebuild completes. You'll "
-           "have to recompute them on the rebuilt index."
-        << std::endl;
+  auto& index = indexAndViews->index_;
+  if (qlever::util::doesDirectoryContainFileWithBasename(indexBaseName)) {
+    throw std::runtime_error{absl::StrCat(
+        "Can't build index with base name \"", indexBaseName,
+        "\" because there are already files with the same base name "
+        "in the same directory")};
   }
   // NOTE: We deliberately use the plain `runFunctionOnExecutor` and not
   // `computeInNewThread` here: the latter wraps the awaitable in
