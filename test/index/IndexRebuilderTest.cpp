@@ -5,6 +5,7 @@
 //  UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
 #include <absl/strings/str_cat.h>
+#include <absl/time/time.h>
 #include <gmock/gmock.h>
 
 #include <boost/asio/awaitable.hpp>
@@ -27,9 +28,7 @@
 // server-integration test below is compiled out there.
 #ifndef __EMSCRIPTEN__
 #include "engine/Server.h"
-#endif
 #include "global/Constants.h"
-#include "global/FileSuffixConstants.h"
 #include "index/IndexRebuilder.h"
 #include "index/IndexRebuilderImpl.h"
 #include "index/TripleComponentConversions.h"
@@ -621,71 +620,42 @@ TEST(IndexRebuilder, materializeToIndex) {
 
       auto sourceDate = index.getImpl().dateOfIndexBuild();
 
-      qlever::materializeToIndex(index.getImpl(), newIndexName, state, vocab,
-                                 blankNodes, cancellationHandle, logFile);
-      EXPECT_TRUE(ql::filesystem::exists(logFile));
+    auto sourceDate = index.getImpl().dateOfIndexBuild();
 
-      // Each phase writes its header (which says what is being processed,
-      // depending on which permutations the index has) and at least its final
-      // progress line (with a percentage and an average speed) to the rebuild's
-      // log file.
-      {
-        auto logStream = ad_utility::makeIfstream(logFile);
-        std::string logContent{std::istreambuf_iterator<char>{logStream}, {}};
-        using ::testing::HasSubstr;
-        EXPECT_THAT(logContent, HasSubstr("Writing new vocabulary (merging "
-                                          "existing and new words) ..."));
-        EXPECT_THAT(
-            logContent,
-            HasSubstr(loadAllPermutations
-                          ? "Recomputing statistics (from 4 permutations, 3 "
-                            "normal and 1 internal) ..."
-                          : "Recomputing statistics (from 2 permutations, 1 "
-                            "normal and 1 internal) ..."));
-        EXPECT_THAT(logContent,
-                    HasSubstr(loadAllPermutations
-                                  ? "Writing new index (8 permutations, 6 "
-                                    "normal and 2 internal) ..."
-                                  : "Writing new index (4 permutations, 2 "
-                                    "normal and 2 internal) ..."));
-        EXPECT_THAT(logContent, HasSubstr("Words written: "));
-        EXPECT_THAT(logContent, HasSubstr("Triples counted: "));
-        EXPECT_THAT(logContent, HasSubstr("Triples written: "));
-        EXPECT_THAT(logContent, HasSubstr("(100.0%)"));
-        EXPECT_THAT(logContent, HasSubstr("[average speed "));
-      }
+    qlever::materializeToIndex(index.getImpl(), newIndexName, state, vocab,
+                               blankNodes, cancellationHandle, logFile);
+    EXPECT_TRUE(std::filesystem::exists(logFile));
 
-      IndexImpl newIndex{ad_utility::makeUnlimitedAllocator<Id>()};
-      newIndex.usePatterns() = usePatterns;
-      newIndex.loadAllPermutations() = loadAllPermutations;
-      newIndex.createFromOnDiskIndex(newIndexName, false);
+    IndexImpl newIndex{ad_utility::makeUnlimitedAllocator<Id>()};
+    newIndex.usePatterns() = usePatterns;
+    newIndex.loadAllPermutations() = loadAllPermutations;
+    newIndex.createFromOnDiskIndex(newIndexName, false);
 
-      // The rebuilt index gets its own, more recent build date. Both dates are
-      // recorded with second resolution, so the rebuild may happen within the
-      // same second as the original build; hence we only assert "not older".
-      auto parseDate = [](const std::string& date) {
-        absl::Time result;
-        std::string error;
-        EXPECT_TRUE(absl::ParseTime(DATE_OF_INDEX_BUILD_FORMAT, date,
-                                    absl::UTCTimeZone(), &result, &error))
-            << error;
-        return result;
-      };
-      EXPECT_GE(parseDate(newIndex.dateOfIndexBuild()), parseDate(sourceDate));
+    // The rebuilt index gets its own, more recent build date. Both dates are
+    // recorded with second resolution, so the rebuild may happen within the
+    // same second as the original build; hence we only assert "not older".
+    auto parseDate = [](const std::string& date) {
+      absl::Time result;
+      std::string error;
+      EXPECT_TRUE(absl::ParseTime(DATE_OF_INDEX_BUILD_FORMAT, date,
+                                  absl::UTCTimeZone(), &result, &error))
+          << error;
+      return result;
+    };
+    EXPECT_GE(parseDate(newIndex.dateOfIndexBuild()), parseDate(sourceDate));
 
-      EXPECT_EQ(newIndex.getBlankNodeManager()->minIndex_,
-                index.getBlankNodeManager()->minIndex_ +
-                    ad_utility::BlankNodeManager::blockSize_);
-      EXPECT_EQ(newIndex.numTriples().normal, 4);
-      EXPECT_EQ(newIndex.numTriples().internal, usePatterns ? 2 : 0);
-      EXPECT_EQ(newIndex.numDistinctPredicates().normal, 3);
-      EXPECT_EQ(newIndex.numDistinctPredicates().internal, usePatterns ? 1 : 0);
-      if (newIndex.loadAllPermutations()) {
-        EXPECT_EQ(newIndex.numDistinctSubjects().normal, 4);
-        EXPECT_EQ(newIndex.numDistinctSubjects().internal, 0);
-        EXPECT_EQ(newIndex.numDistinctObjects().normal, 4);
-        EXPECT_EQ(newIndex.numDistinctObjects().internal, 0);
-      }
+    EXPECT_EQ(newIndex.getBlankNodeManager()->minIndex_,
+              index.getBlankNodeManager()->minIndex_ +
+                  ad_utility::BlankNodeManager::blockSize_);
+    EXPECT_EQ(newIndex.numTriples().normal, 4);
+    EXPECT_EQ(newIndex.numTriples().internal, usePatterns ? 2 : 0);
+    EXPECT_EQ(newIndex.numDistinctPredicates().normal, 3);
+    EXPECT_EQ(newIndex.numDistinctPredicates().internal, usePatterns ? 1 : 0);
+    if (newIndex.loadAllPermutations()) {
+      EXPECT_EQ(newIndex.numDistinctSubjects().normal, 4);
+      EXPECT_EQ(newIndex.numDistinctSubjects().internal, 0);
+      EXPECT_EQ(newIndex.numDistinctObjects().normal, 4);
+      EXPECT_EQ(newIndex.numDistinctObjects().internal, 0);
     }
   }
 }

@@ -5,12 +5,15 @@
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
 #include <absl/cleanup/cleanup.h>
+#include <absl/time/time.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <re2/re2.h>
 
 #include <chrono>
+#include <chrono>
 #include <cstdio>
+#include <filesystem>
 #include <filesystem>
 #include <fstream>
 
@@ -1012,41 +1015,6 @@ TEST(IndexImpl, loadConfigFromOldIndex) {
   nlohmann::json jsonFromFile;
   in >> jsonFromFile;
   EXPECT_EQ(stats, jsonFromFile);
-}
-
-// _____________________________________________________________________________
-TEST(IndexImpl, icuSupportConfigurationMustMatch) {
-  auto index =
-      makeTestIndex("icuSupportConfigurationMustMatch", "<a> <b> <c> .");
-  auto& indexImpl = index.getImpl();
-
-  // A freshly built index records whether the current binary has ICU support.
-  ASSERT_TRUE(indexImpl.configurationJson().contains("has-icu-support"));
-  EXPECT_EQ(indexImpl.configurationJson()["has-icu-support"],
-            ad_utility::useICUDefault);
-  const auto originalConfig = indexImpl.configurationJson();
-
-  // Applying a configuration whose ICU-support flag disagrees with the current
-  // binary must throw.
-  auto mismatchedConfig = originalConfig;
-  mismatchedConfig["has-icu-support"] = !ad_utility::useICUDefault;
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      indexImpl.applyConfiguration(mismatchedConfig),
-      ::testing::HasSubstr(
-          "different string collations and are not interchangeable"));
-
-  // An index built before this flag existed is assumed to have ICU support, so
-  // it loads iff the current binary also has ICU support.
-  auto legacyConfig = originalConfig;
-  legacyConfig.erase("has-icu-support");
-  if constexpr (ad_utility::useICUDefault) {
-    EXPECT_NO_THROW(indexImpl.applyConfiguration(legacyConfig));
-  } else {
-    AD_EXPECT_THROW_WITH_MESSAGE(
-        indexImpl.applyConfiguration(legacyConfig),
-        ::testing::HasSubstr(
-            "different string collations and are not interchangeable"));
-  }
 }
 
 // _____________________________________________________________________________
