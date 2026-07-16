@@ -268,11 +268,10 @@ void runTestForDifferentTypes(T testCase, std::string testCaseName) {
 // This helper function has to be used inside the `testCase` lambdas for the
 // `runTestForDifferentTypes` function above whenever a copy of an `IdTable` has
 // to be made. It is necessary because for some `IdTable` instantiations
-// (for example when the data is stored in a `VectorWithExtraConstructor`) the
-// `clone` member function needs additional arguments. Currently, the only
-// additional argument is the filename for the copy for `IdTables` that store
-// their data in a `VectorWithExtraConstructor`. For an example usage see the
-// test cases below.
+// (for example when the data is stored in a `BufferedVector`) the `clone`
+// member function needs additional arguments. Currently, the only additional
+// argument is the filename for the copy for `IdTables` that store their data in
+// a `BufferedVector`. For an example usage see the test cases below.
 template <typename Table, typename... Args>
 auto clone(const Table& table, Args... args) {
   if constexpr (requires { table.clone(); }) {

@@ -921,6 +921,8 @@ namespace {
 // blocks.
 template <typename Callback>
 auto liftCallback(Callback callback) {
+template <typename Callback>
+auto liftCallback(Callback callback) {
   return [callback = std::move(callback)](const auto& block) mutable {
     ql::ranges::for_each(block, callback);
   };
@@ -2186,10 +2188,10 @@ namespace {
 // is invoked for each table to allow for additional computations while
 // scanning.
 template <typename CustomAction>
+template <typename CustomAction>
 std::packaged_task<void()> computeStatistics(
     const LocatedTriplesSharedState& locatedTriplesSharedState, size_t& counter,
-    const Permutation& permutation, CustomAction customAction,
-    const std::function<void(size_t)>& progress) {
+    const Permutation& permutation, CustomAction customAction) {
   return std::packaged_task<void()>{[&counter, &permutation,
                                      &locatedTriplesSharedState, progress,
                                      customAction = std::move(customAction)]() {
