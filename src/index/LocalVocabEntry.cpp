@@ -15,8 +15,9 @@ ql::strong_ordering LocalVocabEntry::compareThreeWay(
       "Contexts of LocalVocabEntries have to be identical. If this is not the "
       "case this means that stale entries associated with an old index are "
       "falsely carried over somewhere.");
-  int i = context_->compareWords(toStringRepresentation(),
-                                 rhs.toStringRepresentation());
+  int i = context_->getVocab().getCaseComparator().compare(
+      toStringRepresentation(), rhs.toStringRepresentation(),
+      LocaleManager::Level::TOTAL);
   if (i < 0) {
     return ql::strong_ordering::less;
   } else if (i > 0) {

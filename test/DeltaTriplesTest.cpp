@@ -1060,11 +1060,12 @@ TEST_F(DeltaTriplesTest, remapId) {
   auto V = &makeVocabId;
   auto B = &makeBlankNodeId;
   const IndexImpl& index = testQec->getIndex().getImpl();
+  const IndexImpl& index = testQec->getIndex().getImpl();
   qlever::indexRebuilder::IndexRebuildMapping idMapping;
   LocalVocab localVocab;
 
-  LocalVocabEntry sourceEntry = LocalVocabEntry::fromStringRepresentation(
-      "<entry>", index.getLocalVocabContext());
+  LocalVocabEntry sourceEntry =
+      LocalVocabEntry::fromStringRepresentation("<entry>", index);
   Id entryId = Id::makeFromLocalVocabIndex(&sourceEntry);
 
   auto remap = [&idMapping, &localVocab, &index](Id id) {
@@ -1073,6 +1074,18 @@ TEST_F(DeltaTriplesTest, remapId) {
   };
 
   EXPECT_EQ(remap(I(69)), I(69));
+
+  // Without a mapping, a local vocab id is re-anchored: it now points into
+  // `localVocab` (so the id itself changes), but the referenced word is
+  // unchanged.
+  Id reAnchored = remap(entryId);
+  EXPECT_NE(reAnchored.getBits(), entryId.getBits());
+  EXPECT_EQ(localVocab.size(), 1);
+  ASSERT_EQ(reAnchored.getDatatype(), Datatype::LocalVocabIndex);
+  EXPECT_EQ(reAnchored.getLocalVocabIndex()->asLiteralOrIri(),
+            entryId.getLocalVocabIndex()->asLiteralOrIri());
+
+  // With a mapping, the id is replaced by the mapped id.
 
   // Without a mapping, a local vocab id is re-anchored: it now points into
   // `localVocab` (so the id itself changes), but the referenced word is
@@ -1189,7 +1202,9 @@ TEST_F(DeltaTriplesTest, addFromSnapshotDiff) {
   newDeltaTriples.addFromSnapshotDiff(*originalSnapshot, *newSnapshot,
                                       idMapping, std::move(cancellationHandle),
                                       tracer);
-  newDeltaTriples.consolidateAll();
+  ASSERT_NO_THROW(
+      newDeltaTriples.getLocatedTriplesForPermutation(Permutation::SPO)
+          .numTriplesForTesting());
 
   EXPECT_THAT(newDeltaTriples, NumTriples(2, 1, 3, 2, 0));
   auto locatedTriples =
@@ -1299,7 +1314,7 @@ TEST_F(DeltaTriplesTest, addFromSnapshotDiffReanchorsLocalVocabEntries) {
   ASSERT_THAT(entries, ::testing::SizeIs(1));
   const LocalVocabEntry* carried = entries.at(0);
   ASSERT_NE(carried, nullptr);
-  EXPECT_EQ(&carried->getContextForTesting(), &newIndex.getLocalVocabContext());
+  EXPECT_EQ(&carried->getContextForTesting(), &newIndex.getImpl());
   EXPECT_EQ(carried->asLiteralOrIri().toStringRepresentation(), "\"zzz\"");
 
   // The carried entry must behave exactly like a fresh entry that was created
@@ -1307,8 +1322,7 @@ TEST_F(DeltaTriplesTest, addFromSnapshotDiffReanchorsLocalVocabEntries) {
   // would have kept the stale position cached against the old vocabulary),
   // and comparing must not access the old index (checked by the ASAN build,
   // since the old index no longer exists at this point).
-  LocalVocabEntry fresh{carried->asLiteralOrIri(),
-                        newIndex.getImpl().getLocalVocabContext()};
+  LocalVocabEntry fresh{carried->asLiteralOrIri(), newIndex.getImpl()};
   EXPECT_EQ(carried->positionInVocab(), fresh.positionInVocab());
   EXPECT_EQ(*carried, fresh);
 }

@@ -762,6 +762,9 @@ void DeltaTriples::addFromSnapshotDiff(
   difference.remapIds([this, &idMapping](Id& id) {
     remapId(idMapping, id, localVocab_, index_);
   });
+  difference.remapIds([this, &idMapping](Id& id) {
+    remapId(idMapping, id, localVocab_, index_);
+  });
   tracer.endTrace("computeLocatedTriplesDiff");
   tracer.beginTrace("insertDiffedTriples");
   auto addTriples = [this, &cancellationHandle, &difference, &tracer](
@@ -783,12 +786,19 @@ void DeltaTriples::addFromSnapshotDiff(
   tracer.beginTrace("consolidate");
   consolidateAll();
   tracer.endTrace("consolidate");
+  // The four calls above bypass `insertTriples`/`deleteTriples` and thus do
+  // not consolidate. Consolidation is required before any read access, in
+  // particular before the `updateAugmentedMetadata` that follows in
+  // `DeltaTriplesManager::modify`.
+  tracer.beginTrace("consolidate");
+  consolidateAll();
+  tracer.endTrace("consolidate");
   // Update the index of the located triples to mark that they have changed.
   locatedTriples_->index_++;
 }
 
 // _____________________________________________________________________________
-void DeltaTriples::remapId(
+AD_ALWAYS_INLINE void DeltaTriples::remapId(
     const qlever::indexRebuilder::IndexRebuildMapping& idMapping, Id& id,
     LocalVocab& localVocab, const IndexImpl& index) {
   const auto& [insertionPositions, localVocabMapping, blankNodeBlocks,
@@ -799,6 +809,7 @@ void DeltaTriples::remapId(
   } else if (type == Datatype::LocalVocabIndex) {
     auto it = localVocabMapping.find(id.getBits());
     // If we have a mapping, this means that the new index used this to make a
+    // vocab index out of it and we have to do the same.
     // vocab index out of it and we have to do the same.
     if (it != localVocabMapping.end()) {
       id = it->second;
@@ -811,8 +822,7 @@ void DeltaTriples::remapId(
       // cache) into the local vocab and rewrite the id, so that no entry of the
       // new index references the old index, which is destroyed after the swap.
       id = Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
-          LocalVocabEntry{id.getLocalVocabIndex()->asLiteralOrIri(),
-                          index.getLocalVocabContext()}));
+          LocalVocabEntry{id.getLocalVocabIndex()->asLiteralOrIri(), index}));
     }
   } else if (type == Datatype::BlankNodeIndex) {
     auto value = qlever::indexRebuilder::tryRemapBlankNodeId(
