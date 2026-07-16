@@ -13,9 +13,10 @@
 #include <absl/functional/function_ref.h>
 
 #include <cstddef>
+#include <absl/functional/function_ref.h>
+
+#include <cstddef>
 #include <string>
-#include <string_view>
-#include <vector>
 
 #include "backports/filesystem.h"
 
@@ -50,12 +51,6 @@ bool doesDirectoryContainFileWithBasename(const std::string& path);
 size_t deleteFilesInDirectory(
     const ql::filesystem::path& directory,
     absl::FunctionRef<bool(const ql::filesystem::path&)> shouldDelete);
-
-// Return the paths of the directories directly contained in `directory` whose
-// name starts with `prefix`, in unspecified order. This is used to enumerate
-// the `previous.*` index directories left behind by index rebuilds.
-std::vector<ql::filesystem::path> directoriesWithPrefix(
-    const ql::filesystem::path& directory, std::string_view prefix);
 
 // Return `true` if the directory from `path1` is a subdirectory of the
 // directory from `path2`; otherwise return `false`.

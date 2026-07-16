@@ -17,17 +17,16 @@
 #include <utility>
 #include <vector>
 
-#include "GTestHelpers.h"
-#include "backports/StartsWithAndEndsWith.h"
 #include "backports/filesystem.h"
-#include "util/Exception.h"
-#include "util/Log.h"
 #include "util/Random.h"
 
 namespace ad_utility::testing {
 inline auto filenameForTesting() {
   auto tmpFile = ql::filesystem::temp_directory_path() / UuidGenerator()();
+  auto tmpFile = ql::filesystem::temp_directory_path() / UuidGenerator()();
   // Make sure no file like this exists
+  ql::filesystem::remove(tmpFile);
+  absl::Cleanup cleanup{[tmpFile]() { ql::filesystem::remove(tmpFile); }};
   ql::filesystem::remove(tmpFile);
   absl::Cleanup cleanup{[tmpFile]() { ql::filesystem::remove(tmpFile); }};
   return std::make_pair(std::move(tmpFile), std::move(cleanup));
@@ -37,6 +36,8 @@ inline auto filenameForTesting() {
 // that need to inspect the contents of a file written by another
 // component (e.g. a background writer thread that has already drained
 // and closed the stream).
+inline std::vector<std::string> readLines(const ql::filesystem::path& path) {
+  std::ifstream in{path.string()};
 inline std::vector<std::string> readLines(const ql::filesystem::path& path) {
   std::ifstream in{path.string()};
   std::vector<std::string> lines;

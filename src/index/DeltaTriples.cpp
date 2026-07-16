@@ -667,7 +667,7 @@ void DeltaTriples::writeToDisk() const {
       tempPath, localVocab_,
       std::array{toRange(triplesSetsNormal_.triplesDeleted_),
                  toRange(triplesSetsNormal_.triplesInserted_)});
-  std::filesystem::rename(tempPath, filenameForPersisting_.value());
+  ql::filesystem::rename(tempPath, filenameForPersisting_.value());
 }
 
 // _____________________________________________________________________________

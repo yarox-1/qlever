@@ -9,7 +9,6 @@
 
 #include <cstdlib>
 #include <ctime>
-#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <memory>
@@ -98,8 +97,8 @@ class MergeVocabularyTest : public ::testing::Test {
 
     // Create a subdirectory for the test files in the working directory.
     _basePath = _basePath + "/";
-    std::error_code errorCode;
-    std::filesystem::create_directories(_basePath, errorCode);
+    ql::error_code errorCode;
+    ql::filesystem::create_directories(_basePath, errorCode);
     if (errorCode) {
       std::cerr << "Could not create the directory for the test files. This "
                    "might lead to test failures\n";
@@ -183,8 +182,8 @@ class MergeVocabularyTest : public ::testing::Test {
   // __________________________________________________________________
   ~MergeVocabularyTest() {
     // Delete the test files (to debug a test failure, comment this out).
-    std::error_code errorCode;
-    std::filesystem::remove_all(_basePath, errorCode);
+    ql::error_code errorCode;
+    ql::filesystem::remove_all(_basePath, errorCode);
   }
 
   // read all bytes from a file (e.g. to check equality of small test files)

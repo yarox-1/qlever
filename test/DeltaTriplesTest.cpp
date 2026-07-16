@@ -745,8 +745,8 @@ TEST_F(DeltaTriplesTest, storeAndRestoreFromEmptySet) {
   auto tmpFile =
       ql::filesystem::temp_directory_path() / "testEmptyDeltaTriples";
   // Make sure no artifacts from previous crashed runs exists.
-  std::filesystem::remove(tmpFile);
-  absl::Cleanup cleanup{[&tmpFile]() { std::filesystem::remove(tmpFile); }};
+  ql::filesystem::remove(tmpFile);
+  absl::Cleanup cleanup{[&tmpFile]() { ql::filesystem::remove(tmpFile); }};
   deltaTriples.setPersists(tmpFile.string());
   // Write "empty" file
   EXPECT_NO_THROW(deltaTriples.writeToDisk());

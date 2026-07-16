@@ -23,12 +23,7 @@
 #include "./util/RuntimeParametersTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "CompilationInfo.h"
-#include "backports/StartsWithAndEndsWith.h"
-#include "backports/algorithm.h"
 #include "backports/filesystem.h"
-#include "engine/MaterializedViews.h"
-#include "global/Constants.h"
-#include "global/FileSuffixConstants.h"
 #include "index/Index.h"
 #include "index/IndexFormatVersion.h"
 #include "index/IndexImpl.h"
@@ -116,6 +111,31 @@ auto makeTestScanWidthTwo = [](const IndexImpl& index,
     ASSERT_EQ(wol, makeIdTableFromVector(expected));
   };
 };
+
+// Create a temporary directory inside the Google Test temporary directory
+// with the given `name`. The directory and all its contents are deleted when
+// the returned `absl::Cleanup` is destroyed.
+auto makeTemporaryDirectory(std::string_view name) {
+  std::string directory = ::testing::TempDir();
+  if (!ql::ends_with(directory, "/")) {
+    directory.push_back('/');
+  }
+  AD_CORRECTNESS_CHECK(!ql::starts_with(name, '/'));
+  directory += name;
+  // Create directory.
+  ql::filesystem::create_directory(directory);
+
+  // Remove all files in directory when done.
+  absl::Cleanup cleanup{[directory]() {
+    ql::error_code ec;
+    ql::filesystem::remove_all(directory, ec);
+    if (ec) {
+      AD_LOG(ERROR) << "Could not remove temporary directory " << directory
+                    << ": " << ec.message();
+    }
+  }};
+  return std::make_pair(std::move(directory), std::move(cleanup));
+}
 }  // namespace
 
 TEST(IndexTest, createFromTurtleTest) {
@@ -875,26 +895,6 @@ TEST(IndexImpl, createPermutation) {
   EXPECT_TRUE(ql::filesystem::exists(onDiskBase + ".index.pso"));
   EXPECT_TRUE(ql::filesystem::exists(onDiskBase + ".index.pso.meta"));
 
-  // Writing the same permutation with the writer-thread throttle disabled
-  // (0 means "fall back to `permutation-writer-num-threads`") must give the
-  // same result. Together with the default of 1 used by the calls above and
-  // below, this exercises the translation of the runtime parameter to the
-  // writer-thread override on both of its branches. Use a separate base name,
-  // so that the permutation that was already finalized above stays intact.
-  {
-    auto cleanupParameter = setRuntimeParameterForTest<
-        &RuntimeParameters::rebuildPermutationWriterNumThreads_>(0);
-    index.setOnDiskBase(onDiskBase + ".unthrottled");
-    auto [uniquePredicatesUnthrottled, metaUnthrottled] =
-        index.createPermutationWithoutMetadata(
-            4,
-            ad_utility::InputRangeTypeErased{std::array<IdTableStatic<0>, 2>{
-                tables.at(0).clone(), tables.at(1).clone()}},
-            permutation, false);
-    index.setOnDiskBase(onDiskBase);
-    EXPECT_EQ(uniquePredicatesUnthrottled, uniquePredicates);
-  }
-
   auto [uniqueInternalPredicates, internalMeta] =
       index.createPermutationWithoutMetadata(
           4, ad_utility::InputRangeTypeErased{std::move(tables)}, permutation,
@@ -902,6 +902,8 @@ TEST(IndexImpl, createPermutation) {
   index.finalizePermutation(internalMeta, permutation, true);
 
   EXPECT_EQ(uniqueInternalPredicates, 3);
+  EXPECT_TRUE(ql::filesystem::exists(onDiskBase + ".internal.index.pso"));
+  EXPECT_TRUE(ql::filesystem::exists(onDiskBase + ".internal.index.pso.meta"));
   EXPECT_TRUE(ql::filesystem::exists(onDiskBase + ".internal.index.pso"));
   EXPECT_TRUE(ql::filesystem::exists(onDiskBase + ".internal.index.pso.meta"));
 
@@ -952,6 +954,7 @@ TEST(IndexImpl, writePatternsToFile) {
   index.getPatterns() = CompactVectorOfStrings{data};
   index.writePatternsToFile();
 
+  ASSERT_TRUE(ql::filesystem::exists(onDiskBase + ".index.patterns"));
   ASSERT_TRUE(ql::filesystem::exists(onDiskBase + ".index.patterns"));
 
   double avgNumDistinctSubjectsPerPredicate;

@@ -246,7 +246,7 @@ inline void deleteFile(const ql::filesystem::path& path,
 
 namespace detail {
 template <typename Stream, bool forWriting, typename... Args>
-Stream makeFilestream(const std::filesystem::path& path, Args&&... args) {
+Stream makeFilestream(const ql::filesystem::path& path, Args&&... args) {
   Stream stream{path.string(), AD_FWD(args)...};
   std::string_view mode = forWriting ? "for writing" : "for reading";
   if (!stream.is_open()) {
@@ -265,13 +265,13 @@ Stream makeFilestream(const std::filesystem::path& path, Args&&... args) {
 // additional `args`. Throw an exception stating the filename and the absolute
 // path when the file can't be opened.
 template <typename... Args>
-std::ifstream makeIfstream(const std::filesystem::path& path, Args&&... args) {
+std::ifstream makeIfstream(const ql::filesystem::path& path, Args&&... args) {
   return detail::makeFilestream<std::ifstream, false>(path, AD_FWD(args)...);
 }
 
 // Similar to `makeIfstream`, but returns `std::ofstream`
 template <typename... Args>
-std::ofstream makeOfstream(const std::filesystem::path& path, Args&&... args) {
+std::ofstream makeOfstream(const ql::filesystem::path& path, Args&&... args) {
   return detail::makeFilestream<std::ofstream, true>(path, AD_FWD(args)...);
 }
 

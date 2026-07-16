@@ -16,6 +16,7 @@
 #include <stdexcept>
 
 #include "backports/filesystem.h"
+#include "backports/filesystem.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
 #include "engine/MaterializedViewsQueryAnalysis.h"
@@ -361,7 +362,7 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
               << std::endl;
   auto filename = getFilenameBase(onDiskBase_, name_);
 
-  auto metadataFilename = absl::StrCat(filename, VIEW_INFO_SUFFIX);
+  auto metadataFilename = absl::StrCat(filename, ".viewinfo.json");
   if (!ql::filesystem::exists(metadataFilename)) {
     throw std::runtime_error(
         absl::StrCat("The materialized view '", name_, "' does not exist."));

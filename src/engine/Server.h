@@ -10,12 +10,11 @@
 #ifndef QLEVER_SRC_ENGINE_SERVER_H
 #define QLEVER_SRC_ENGINE_SERVER_H
 
-#include <absl/functional/any_invocable.h>
-
 #include <optional>
 #include <string>
 #include <vector>
 
+#include "backports/filesystem.h"
 #include "backports/filesystem.h"
 #include "engine/ExecuteUpdate.h"
 #include "engine/KeepPreviousIndexDirs.h"
@@ -85,6 +84,7 @@ class Server {
 
   // Open `path` and register start/end callbacks on the query registry that
   // write one JSONL line per query event to it. Call once, after construction.
+  void configureQueryEventLog(const ql::filesystem::path& path);
   void configureQueryEventLog(const ql::filesystem::path& path);
 
   // Get server statistics.

@@ -13,7 +13,6 @@
 #include <boost/asio/detached.hpp>
 #include <boost/asio/thread_pool.hpp>
 #include <boost/asio/use_future.hpp>
-#include <filesystem>
 
 #include "../util/GTestHelpers.h"
 #include "../util/HttpRequestHelpers.h"
@@ -23,19 +22,14 @@
 #include "../util/RuntimeParametersTestHelpers.h"
 #include "../util/TripleComponentTestHelpers.h"
 #include "backports/filesystem.h"
-// The `server` library is not built under Emscripten (`Server.cpp` crashes
-// emsdk 6.0.2's clang backend, see `src/engine/CMakeLists.txt`), so the
-// server-integration test below is compiled out there.
-#ifndef __EMSCRIPTEN__
 #include "engine/Server.h"
 #include "global/Constants.h"
 #include "index/IndexRebuilder.h"
 #include "index/IndexRebuilderImpl.h"
 #include "index/TripleComponentConversions.h"
 #include "index/vocabulary/VocabularyType.h"
-#include "util/File.h"
+#include "libqlever/Qlever.h"
 #include "util/FilesystemHelpers.h"
-#include "util/SourceLocation.h"
 
 using namespace qlever::indexRebuilder;
 using namespace std::string_literals;
@@ -550,6 +544,7 @@ TEST(IndexRebuilder, createPermutationWriterTask) {
   // Assert nothing has happened yet
   for (std::string_view suffix : suffixes) {
     EXPECT_FALSE(ql::filesystem::exists(prefix + suffix))
+    EXPECT_FALSE(ql::filesystem::exists(prefix + suffix))
         << "File " << prefix + suffix
         << " should not exist before the task is executed.";
   }
@@ -566,6 +561,7 @@ TEST(IndexRebuilder, createPermutationWriterTask) {
   net::co_spawn(threadPool, std::move(task), net::detached);
   threadPool.join();
   for (std::string_view suffix : suffixes) {
+    EXPECT_TRUE(ql::filesystem::exists(prefix + suffix));
     EXPECT_TRUE(ql::filesystem::exists(prefix + suffix));
     EXPECT_EQ(fileToBuffer(index.getOnDiskBase() + suffix),
               fileToBuffer(prefix + suffix));
@@ -614,17 +610,15 @@ TEST(IndexRebuilder, materializeToIndex) {
           index.deltaTriplesManager()
               .getCurrentLocatedTriplesSharedStateWithVocab();
 
-      ql::filesystem::create_directory(baseFolder);
-      absl::Cleanup removeIndexFiles{
-          [&baseFolder] { ql::filesystem::remove_all(baseFolder); }};
-
-      auto sourceDate = index.getImpl().dateOfIndexBuild();
+    ql::filesystem::create_directory(baseFolder);
+    absl::Cleanup removeIndexFiles{
+        [&baseFolder] { ql::filesystem::remove_all(baseFolder); }};
 
     auto sourceDate = index.getImpl().dateOfIndexBuild();
 
     qlever::materializeToIndex(index.getImpl(), newIndexName, state, vocab,
                                blankNodes, cancellationHandle, logFile);
-    EXPECT_TRUE(std::filesystem::exists(logFile));
+    EXPECT_TRUE(ql::filesystem::exists(logFile));
 
     IndexImpl newIndex{ad_utility::makeUnlimitedAllocator<Id>()};
     newIndex.usePatterns() = usePatterns;
@@ -701,7 +695,9 @@ TEST(IndexRebuilder, materializeToIndexWithZeroMemorySourceIndex) {
           .getCurrentLocatedTriplesSharedStateWithVocab();
 
   ql::filesystem::create_directory(baseFolder);
+  ql::filesystem::create_directory(baseFolder);
   absl::Cleanup removeIndexFiles{
+      [&baseFolder] { ql::filesystem::remove_all(baseFolder); }};
       [&baseFolder] { ql::filesystem::remove_all(baseFolder); }};
 
   EXPECT_NO_THROW(qlever::materializeToIndex(index.getImpl(), newIndexName,
@@ -737,25 +733,11 @@ void cleanFilesWithPrefix(std::string_view prefix) {
   AD_CONTRACT_CHECK(!prefix.empty(),
                     "This function is not meant to delete all files in the "
                     "current directory. Please specify a prefix.");
-  namespace fs = std::filesystem;
-  // Collect the matching entries first and delete them only afterwards.
-  // Deleting entries while iterating the directory is unspecified behavior and
-  // can cause entries to be skipped on some platforms (observed on macOS),
-  // leaving leftover files behind.
-  std::vector<fs::directory_entry> toDelete;
-  ql::ranges::copy_if(fs::directory_iterator("."), std::back_inserter(toDelete),
-                      [prefix](const auto& e) {
-                        return ql::starts_with(e.path().filename().string(),
-                                               prefix);
-                      });
-  AD_CONTRACT_CHECK(
-      ql::ranges::all_of(
-          toDelete, [](const auto& entry) { return entry.is_regular_file(); }),
-      "All entries matching the prefix must be regular files, this function "
-      "does not delete directories.");
-  for (const auto& entry : toDelete) {
-    ad_utility::deleteFile(entry.path());
-  }
+  // `deleteFilesInDirectory` collects the matching entries first and deletes
+  // them only afterwards, and only deletes regular files (not directories).
+  qlever::util::deleteFilesInDirectory(".", [prefix](const auto& path) {
+    return ql::starts_with(path.filename().string(), prefix);
+  });
 }
 }  // namespace
 
@@ -882,302 +864,37 @@ TEST(IndexRebuilder, serverIntegration) {
   EXPECT_EQ(response2.base().result(),
             boost::beast::http::status::too_many_requests);
 
-  // With the default parameters, the old index was moved to a
-  // `previous.<datetime>` directory, the new index took over the base name of
-  // the old index, and the temporary rebuild directory was removed again.
-  EXPECT_TRUE(fs::exists(indexName + ".meta-data.json"));
-  auto previousDirs = dirsWithPrefix("previous.");
-  ASSERT_EQ(previousDirs.size(), 1u);
-  EXPECT_TRUE(
-      fs::exists(previousDirs.front() / (indexName + ".meta-data.json")));
-  EXPECT_TRUE(dirsWithPrefix("rebuild.").empty());
+  // We use this config as a proxy for the index rebuilder having finished
+  // successfully.
+  EXPECT_TRUE(ql::filesystem::exists("my-name.meta-data.json"));
 
-  // Rebuild with explicitly given directories.
-  auto request3 = makeRebuildRequest(
-      "&rebuild-tmp-dir=serverIntegration.tmp"
-      "&rebuild-previous-index-dir=serverIntegration.old");
+  auto request3 = ad_utility::testing::makeGetRequest(
+      "/?cmd=rebuild-index&access-token=accessToken");
   auto response3 = performRequest(request3).get();
   EXPECT_EQ(response3.base().result(), boost::beast::http::status::ok);
-  EXPECT_TRUE(fs::exists(fs::path{"serverIntegration.old"} /
-                         (indexName + ".meta-data.json")));
-  EXPECT_FALSE(fs::exists("serverIntegration.tmp"));
+  // By default QLever should assign a default name for the new index.
+  EXPECT_TRUE(ql::filesystem::exists("new_index.meta-data.json"));
 
-  // The directory for the old index must be empty or non-existing.
-  auto request4 =
-      makeRebuildRequest("&rebuild-previous-index-dir=serverIntegration.old");
-  expectRequestFailsWith(
-      request4, ::testing::HasSubstr("already exists and is not empty"));
+  // The index with the same name already exists, so we don't want to overwrite
+  // it.
+  auto request4 = ad_utility::testing::makeGetRequest(
+      "/?cmd=rebuild-index&access-token=accessToken");
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      performRequest(request4).get(),
+      ::testing::HasSubstr("already files with the same base name"));
 
-  // The directories must be relative paths and located inside the directory
-  // of the current index.
-  auto request5 =
-      makeRebuildRequest("&rebuild-previous-index-dir=%2Fabsolute-path");
-  expectRequestFailsWith(request5,
-                         ::testing::HasSubstr("must be a relative path"));
+  // The index has to reside within the same directory as the original index.
+  auto request5 = ad_utility::testing::makeGetRequest(
+      "/?cmd=rebuild-index&access-token=accessToken&index-name=%2Fmy-name");
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      performRequest(request5).get(),
+      ::testing::HasSubstr("not located in the same directory"));
 
-  auto request6 = makeRebuildRequest("&rebuild-tmp-dir=..%2Fother");
-  expectRequestFailsWith(request6, ::testing::HasSubstr("not a subdirectory"));
-
-  threadPool.join();
-}
-
-// _____________________________________________________________________________
-TEST(IndexRebuilder, serverIntegrationDroppedStateWarnings) {
-  SKIP_IF_LOGLEVEL_IS_LOWER(WARN);
-  cleanDirsWithPrefix("droppedState.");
-  namespace net = boost::asio;
-  net::thread_pool threadPool{1};
-
-  std::string indexName =
-      "IndexRebuilder_serverIntegrationDroppedStateWarnings";
-  ad_utility::testing::TestIndexConfig indexConfig{
-      "<a> <b> \"some literal text\" ."};
-  indexConfig.createTextIndex = true;
-  ad_utility::testing::makeTestIndex(indexName, std::move(indexConfig));
-
-  qlever::EngineConfig config;
-  config.baseName_ = indexName;
-  config.persistUpdates_ = false;
-  // Keep all previous index directories, see `serverIntegration` above.
-  config.keepPreviousIndexDirs_ = qlever::KeepPreviousIndexDirs::All;
-
-  // Write a materialized view to disk so it can be preloaded below.
-  {
-    qlever::Qlever engine{config};
-    engine.writeMaterializedView("droppedView", "SELECT * { ?s ?p ?o }");
-  }
-
-  // Load both the text index and the materialized view, so the rebuild warns
-  // that they will be dropped.
-  config.loadTextIndex_ = true;
-  config.preloadMaterializedViews_ = {"droppedView"};
-  Server server{4321, 1, "accessToken", config};
-
-  auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
-  auto request = ad_utility::testing::makeGetRequest(
-      "/?cmd=rebuild-index&access-token=accessToken"
-      "&rebuild-tmp-dir=droppedState.tmp"
-      "&rebuild-previous-index-dir=droppedState.old");
-  using ResT = ad_utility::httpUtils::ResponseT;
-  auto response =
-      net::co_spawn(
-          threadPool,
-          server.onlyForTestingProcess<std::decay_t<decltype(request)>, ResT>(
-              request),
-          net::use_future)
-          .get();
-  EXPECT_EQ(response.base().result(), boost::beast::http::status::ok);
-
-  EXPECT_THAT(logStream.str(),
-              ::testing::HasSubstr("text search will no longer work"));
-  EXPECT_THAT(logStream.str(),
-              ::testing::HasSubstr("Materialized views were loaded"));
-
-  threadPool.join();
-  cleanDirsWithPrefix("droppedState.");
-}
-
-// _____________________________________________________________________________
-TEST(IndexRebuilder, serverIntegrationAutomaticRebuild) {
-  // The automatic rebuild below uses the default directory names and the checks
-  // below inspect all directories with a given prefix, see the comment in
-  // `serverIntegration` above for why this needs a fresh working directory.
-  auto cleanup = ad_utility::testing::useFreshWorkingDirectory();
-
-  std::string indexName = gtestCurrentTestName();
-  ad_utility::testing::makeTestIndex(indexName, "<a> <b> <c> .");
-
-  qlever::EngineConfig config;
-  config.baseName_ = indexName;
-  config.persistUpdates_ = false;
-  // Keep all previous index directories, see `serverIntegration` above.
-  config.keepPreviousIndexDirs_ = qlever::KeepPreviousIndexDirs::All;
-  // `min == max == 3` makes the threshold a fixed three delta triples,
-  // independent of the index size: trigger an automatic rebuild as soon as the
-  // number of delta triples reaches three.
-  config.rebuildIndexStrategy_ = qlever::RebuildIndexStrategy{3, 3, 1.0};
-  serverTestHelpers::ServerForTesting server{1, "accessToken", config};
-
-  auto performUpdate = [&server](std::string_view update) {
-    auto request = ad_utility::testing::makePostRequest(
-        "/?access-token=accessToken", "application/sparql-update",
-        std::string{update});
-    auto response = server.process(request);
-    EXPECT_EQ(response.base().result(), boost::beast::http::status::ok);
-  };
-
-  // The number of delta triples of the currently active index.
-  auto numDeltaTriples = [&server]() -> int64_t {
-    auto counts = server.deltaTriplesManager()
-                      .getCurrentLocatedTriplesSharedState()
-                      ->counts_;
-    AD_CORRECTNESS_CHECK(counts.has_value());
-    auto [inserted, deleted] = counts.value();
-    return inserted + deleted;
-  };
-
-  // Two delta triples do not reach the threshold of three, so no rebuild is
-  // triggered. This is checked race-free: the trigger decision is made before
-  // the response is sent, so after the update has returned, the flag can only
-  // be set if a rebuild was started.
-  performUpdate("INSERT DATA { <d> <e> <f> . <g> <h> <i> . }");
-  EXPECT_EQ(numDeltaTriples(), 2);
-  EXPECT_FALSE(server.server().rebuildInProgress_.load());
-  EXPECT_TRUE(dirsWithPrefix("previous.").empty());
-
-  // The third delta triple reaches the threshold and triggers a rebuild in
-  // the background. Wait until it has completed, which is observable by the
-  // delta triples being merged into the new index (their number drops to
-  // zero) and the old index appearing in a `previous.<datetime>` directory.
-  performUpdate("INSERT DATA { <j> <k> <l> . }");
-  auto deadline = std::chrono::steady_clock::now() + std::chrono::minutes(2);
-  while (
-      (numDeltaTriples() != 0 || server.server().rebuildInProgress_.load()) &&
-      std::chrono::steady_clock::now() < deadline) {
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
-  }
-  EXPECT_EQ(numDeltaTriples(), 0);
-  EXPECT_FALSE(server.server().rebuildInProgress_.load());
-  EXPECT_EQ(dirsWithPrefix("previous.").size(), 1u);
-  EXPECT_TRUE(ql::filesystem::exists(indexName + ".meta-data.json"));
-
-  // The rebuilt index answers queries and contains the update triples.
-  auto request = ad_utility::testing::makeGetRequest(
-      "/?query=SELECT%20%2A%20WHERE%20%7B%20%3Cj%3E%20%3Fp%20%3Fo%20%7D");
-  auto response = server.process(request);
-  EXPECT_EQ(response.base().result(), boost::beast::http::status::ok);
-  EXPECT_THAT(
-      serverTestHelpers::responseBodyToString(std::move(response.body())),
-      ::testing::HasSubstr("\"value\":\"l\""));
-
-  // The remaining paths of the trigger machinery, each deterministically:
-  // without a strategy (manual mode) the trigger does nothing; while a
-  // rebuild is (apparently) in progress, it returns early without spawning
-  // anything, and the background coroutine logs that it skipped; the
-  // completion handler logs a failure and ignores the no-exception case.
-  {
-    auto [logCleanup, logStream] = setGlobalLoggingStreamToStringStream();
-    DeltaTriplesCount hugeCount{1000, 1000};
-    auto strategy =
-        std::exchange(server.server().rebuildIndexStrategy_, std::nullopt);
-    server.server().triggerRebuildIfStrategySaysSo(hugeCount, 1);
-    server.server().rebuildIndexStrategy_ = strategy;
-    server.server().rebuildInProgress_.store(true);
-    server.server().triggerRebuildIfStrategySaysSo(hugeCount, 1);
-    EXPECT_THAT(logStream.str(),
-                ::testing::Not(::testing::HasSubstr("Triggering")));
-
-    boost::asio::thread_pool threadPool{1};
-    boost::asio::co_spawn(threadPool, server.server().runAutomaticRebuild(),
-                          boost::asio::use_future)
-        .get();
-    EXPECT_THAT(
-        logStream.str(),
-        ::testing::HasSubstr("Automatic index rebuild skipped, another rebuild "
-                             "started concurrently"));
-    server.server().rebuildInProgress_.store(false);
-
-    Server::logAutomaticRebuildFailure(
-        std::make_exception_ptr(std::runtime_error{"boom"}));
-    EXPECT_THAT(logStream.str(),
-                ::testing::HasSubstr("Automatic index rebuild failed: boom"));
-    Server::logAutomaticRebuildFailure(nullptr);
-  }
-}
-// _____________________________________________________________________________
-TEST(IndexRebuilder, serverIntegrationKeepPreviousIndexDirs) {
-  // Run in a fresh working directory: this test creates and deletes
-  // `previous.*` directories, which would interfere with the
-  // server-integration tests above when the tests run concurrently in the
-  // same working directory. Declared first, so that it is restored and
-  // removed last, i.e. after the `server` and the `threadPool` below have
-  // been destroyed.
-  auto restoreWorkingDir = ad_utility::testing::useFreshWorkingDirectory();
-  namespace net = boost::asio;
-  net::thread_pool threadPool{1};
-
-  std::string indexName = gtestCurrentTestName();
-  ad_utility::testing::makeTestIndex(indexName, "<a> <b> <c> .");
-
-  qlever::EngineConfig config;
-  config.baseName_ = indexName;
-  config.keepPreviousIndexDirs_ =
-      qlever::KeepPreviousIndexDirs::OriginalAndMostRecent;
-  Server server{4321, 1, "accessToken", config};
-
-  // Perform the given request on the `threadPool` (like in `serverIntegration`
-  // above) and return the response. NOTE: A fresh, request-local `io_context`
-  // (as used by `ServerForTesting::process`) would be destroyed right after
-  // the response future resolves, while the server-pool thread that posted the
-  // final coroutine resumption can still be inside the signal on that
-  // context's scheduler event; the thread sanitizer reports this as a race
-  // between `pthread_cond_signal` and `pthread_cond_destroy`.
-  auto performRequest = [&server, &threadPool](auto& request) {
-    return net::co_spawn(
-               threadPool,
-               server.onlyForTestingProcess<std::decay_t<decltype(request)>,
-                                            ad_utility::httpUtils::ResponseT>(
-                   request),
-               net::use_future)
-        .get();
-  };
-
-  // Trigger a manual rebuild and wait for it (the request only returns after
-  // the new index has been swapped in, which includes the cleanup).
-  auto rebuild = [&performRequest]() {
-    auto request = ad_utility::testing::makeGetRequest(
-        "/?cmd=rebuild-index&access-token=accessToken");
-    auto response = performRequest(request);
-    EXPECT_EQ(response.base().result(), boost::beast::http::status::ok);
-  };
-
-  // The names of the `previous.*` directories, sorted. The sort order is the
-  // order from oldest to newest here: the names contain the build date of the
-  // retired index (uniquified with a numeric suffix for rebuilds within the
-  // same second, see `Qlever::makeIndexRebuildConfig`).
-  auto previousDirNames = []() {
-    std::vector<std::string> result;
-    for (const auto& dir : dirsWithPrefix("previous.")) {
-      result.push_back(dir.filename().string());
-    }
-    ql::ranges::sort(result);
-    return result;
-  };
-
-  // After the first rebuild, there is one previous index directory (the
-  // original index the server was started on), which the policy keeps.
-  rebuild();
-  auto afterFirst = previousDirNames();
-  ASSERT_EQ(afterFirst.size(), 1u);
-  std::string originalDir = afterFirst.front();
-
-  // After the second rebuild, the directory added by it is the most recent
-  // one, so both are kept.
-  rebuild();
-  auto afterSecond = previousDirNames();
-  ASSERT_EQ(afterSecond.size(), 2u);
-  EXPECT_EQ(afterSecond.front(), originalDir);
-  std::string middleDir = afterSecond.back();
-
-  // The third rebuild adds another directory, so now the one added by the
-  // second rebuild is neither the original nor the most recent and is
-  // deleted.
-  rebuild();
-  auto afterThird = previousDirNames();
-  ASSERT_EQ(afterThird.size(), 2u);
-  EXPECT_EQ(afterThird.front(), originalDir);
-  EXPECT_NE(afterThird.back(), middleDir);
-
-  // The rebuilt index still answers queries. Unlike the `cmd=rebuild-index`
-  // requests above, a query needs the query hub (for the live runtime
-  // information via websocket).
-  auto queryHub = std::make_shared<ad_utility::websocket::QueryHub>(
-      threadPool.get_executor());
-  server.queryHub_ = queryHub;
-  auto request = ad_utility::testing::makeGetRequest(
-      "/?query=SELECT%20%2A%20WHERE%20%7B%20%3Fs%20%3Fp%20%3Fo%20%7D");
-  auto response = performRequest(request);
-  EXPECT_EQ(response.base().result(), boost::beast::http::status::ok);
+  auto request6 = ad_utility::testing::makeGetRequest(
+      "/?cmd=rebuild-index&access-token=accessToken&index-name=..%2Fother");
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      performRequest(request6).get(),
+      ::testing::HasSubstr("not located in the same directory"));
 
   threadPool.join();
 }
