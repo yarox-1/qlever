@@ -265,6 +265,7 @@ Result PathSearch::computeResult([[maybe_unused]] bool requestLaziness) {
     }
     paths = allPaths(sources, targets, binSearch, config_.cartesian_,
                      config_.numPathsPerTarget_, config_.maxDepth_);
+                     config_.numPathsPerTarget_, config_.maxDepth_);
 
     timer.stop();
     auto searchTime = timer.msecs();
@@ -334,6 +335,11 @@ PathsLimited PathSearch::findPaths(const Id& source,
                                    const BinSearchWrapper& binSearch,
                                    std::optional<uint64_t> numPathsPerTarget,
                                    std::optional<uint64_t> maxDepth) const {
+PathsLimited PathSearch::findPaths(const Id& source,
+                                   const std::unordered_set<uint64_t>& targets,
+                                   const BinSearchWrapper& binSearch,
+                                   std::optional<uint64_t> numPathsPerTarget,
+                                   std::optional<uint64_t> maxDepth) const {
   std::vector<Edge> edgeStack;
   Path currentPath{EdgesLimited(allocator())};
   std::unordered_map<
@@ -346,6 +352,13 @@ PathsLimited PathSearch::findPaths(const Id& source,
       visited{allocator()};
 
   visited.insert(source.getBits());
+  // The source sits at depth 0, so its outgoing edges yield paths of depth
+  // 1. If `maxDepth` is 0, we therefore must not seed the stack at all.
+  // NOTE: `std::nullopt` (no depth limit) compares unequal to 0 here.
+  if (maxDepth != 0) {
+    for (auto edge : binSearch.outgoingEdes(source)) {
+      edgeStack.push_back(std::move(edge));
+    }
   // The source sits at depth 0, so its outgoing edges yield paths of depth
   // 1. If `maxDepth` is 0, we therefore must not seed the stack at all.
   // NOTE: `std::nullopt` (no depth limit) compares unequal to 0 here.
@@ -391,6 +404,14 @@ PathsLimited PathSearch::findPaths(const Id& source,
         if (!ad_utility::contains(visited, outgoingEdge.end_.getBits())) {
           edgeStack.push_back(outgoingEdge);
         }
+    // Only expand the frontier if we are still allowed to grow the spine.
+    // `currentPath.size()` is the depth of the just-extended path; the
+    // pushed edges would extend it by one.
+    if (!maxDepth.has_value() || currentPath.size() < maxDepth.value()) {
+      for (const auto& outgoingEdge : binSearch.outgoingEdes(edge.end_)) {
+        if (!ad_utility::contains(visited, outgoingEdge.end_.getBits())) {
+          edgeStack.push_back(outgoingEdge);
+        }
       }
     }
   }
@@ -399,6 +420,12 @@ PathsLimited PathSearch::findPaths(const Id& source,
 }
 
 // _____________________________________________________________________________
+PathsLimited PathSearch::allPaths(ql::span<const Id> sources,
+                                  ql::span<const Id> targets,
+                                  const BinSearchWrapper& binSearch,
+                                  bool cartesian,
+                                  std::optional<uint64_t> numPathsPerTarget,
+                                  std::optional<uint64_t> maxDepth) const {
 PathsLimited PathSearch::allPaths(ql::span<const Id> sources,
                                   ql::span<const Id> targets,
                                   const BinSearchWrapper& binSearch,
@@ -414,16 +441,17 @@ PathsLimited PathSearch::allPaths(ql::span<const Id> sources,
       targetSet.insert(target.getBits());
     }
     for (auto source : sources) {
-      for (auto& path : findPaths(source, targetSet, binSearch,
-                                  numPathsPerTarget, maxDepth)) {
-        paths.push_back(std::move(path));
+      for (const auto& path : findPaths(source, targetSet, binSearch,
+                                        numPathsPerTarget, maxDepth)) {
+        paths.push_back(path);
       }
     }
   } else {
     for (size_t i = 0; i < sources.size(); i++) {
-      for (auto& path : findPaths(sources[i], {targets[i].getBits()}, binSearch,
-                                  numPathsPerTarget, maxDepth)) {
-        paths.push_back(std::move(path));
+      for (const auto& path :
+           findPaths(sources[i], {targets[i].getBits()}, binSearch,
+                     numPathsPerTarget, maxDepth)) {
+        paths.push_back(path);
       }
     }
   }
