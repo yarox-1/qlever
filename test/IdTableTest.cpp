@@ -10,6 +10,7 @@
 
 #include <array>
 #include <string>
+#include <string>
 #include <vector>
 
 #include "./util/AllocatorTestHelpers.h"
@@ -17,13 +18,24 @@
 #include "./util/IdTestHelpers.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
-#include "util/CompilerWarnings.h"
 #include "util/TypeIdentity.h"
 
 using namespace ad_utility::testing;
 using ad_utility::use_type_identity::ti;
 namespace {
 auto V = ad_utility::testing::VocabId;
+
+// A storage type that only differs from a plain `std::vector` in that it has an
+// additional constructor that takes (and ignores) the arguments that the old
+// disk-based `BufferedVector` used to need (a threshold and a filename). It is
+// used to test that the `IdTable` works with a column storage type that is not
+// exactly `std::vector`, and that needs constructor arguments.
+template <typename T>
+struct VectorWithExtraConstructor : public std::vector<T> {
+  using std::vector<T>::vector;
+  VectorWithExtraConstructor(size_t, std::string) {}
+};
+}  // namespace
 
 // A storage type that only differs from a plain `std::vector` in that it has an
 // additional constructor that takes (and ignores) the arguments that the old
@@ -232,6 +244,7 @@ TEST(IdTable, rowIterators) {
 // - The default `IdTable` (stores `Id`s in a `vector<Id, AllocatorWithLimit>`.
 // - An `IdTable` that stores plain `int`s in a plain `std::vector`.
 // - An `IdTable` that stores `Id`s in a `VectorWithExtraConstructor`.
+// - An `IdTable` that stores `Id`s in a `VectorWithExtraConstructor`.
 // Arguments:
 // `NumIdTables` - The number of distinct `IdTable` objects that are used inside
 //                 the test case
@@ -241,11 +254,15 @@ TEST(IdTable, rowIterators) {
 // the second one (if present) is a `std::vector` with `NumIdTables` entries
 // that represent the additional arguments that are needed to instantiate an
 // `IdTable` (e.g. an allocator or a `VectorWithExtraConstructor`).
+// `IdTable` (e.g. an allocator or a `VectorWithExtraConstructor`).
 template <size_t NumIdTables, typename T>
 void runTestForDifferentTypes(T testCase, std::string testCaseName) {
   using Buffer = VectorWithExtraConstructor<Id>;
+  using Buffer = VectorWithExtraConstructor<Id>;
   using BufferedTable = columnBasedIdTable::IdTable<Id, 0, Buffer>;
   using IntTable = columnBasedIdTable::IdTable<int, 0>;
+  // Prepare the vectors of `allocators` and distinct
+  // `VectorWithExtraConstructor`s needed for the respective `IdTable` types.
   // Prepare the vectors of `allocators` and distinct
   // `VectorWithExtraConstructor`s needed for the respective `IdTable` types.
   std::vector<std::decay_t<decltype(makeAllocator())>> allocators;
@@ -268,10 +285,11 @@ void runTestForDifferentTypes(T testCase, std::string testCaseName) {
 // This helper function has to be used inside the `testCase` lambdas for the
 // `runTestForDifferentTypes` function above whenever a copy of an `IdTable` has
 // to be made. It is necessary because for some `IdTable` instantiations
-// (for example when the data is stored in a `BufferedVector`) the `clone`
-// member function needs additional arguments. Currently, the only additional
-// argument is the filename for the copy for `IdTables` that store their data in
-// a `BufferedVector`. For an example usage see the test cases below.
+// (for example when the data is stored in a `VectorWithExtraConstructor`) the
+// `clone` member function needs additional arguments. Currently, the only
+// additional argument is the filename for the copy for `IdTables` that store
+// their data in a `VectorWithExtraConstructor`. For an example usage see the
+// test cases below.
 template <typename Table, typename... Args>
 auto clone(const Table& table, Args... args) {
   if constexpr (requires { table.clone(); }) {
@@ -860,11 +878,18 @@ TEST(IdTableTest, statusAfterMove) {
     // The same behavior also holds for an `IdTable` with a custom column
     // storage type that needs constructor arguments.
     using Buffer = VectorWithExtraConstructor<Id>;
+    // The same behavior also holds for an `IdTable` with a custom column
+    // storage type that needs constructor arguments.
+    using Buffer = VectorWithExtraConstructor<Id>;
     Buffer buffer(0, "IdTableTest.statusAfterMove.dat");
     using BufferedTable = columnBasedIdTable::IdTable<Id, 1, Buffer>;
     BufferedTable table{1, std::array{std::move(buffer)}};
     table.push_back(std::array{V(19)});
     auto t2 = std::move(table);
+    // The moved-from `table` is valid and still has the same number of columns,
+    // but they are now empty.
+    ASSERT_EQ(1, table.numColumns());
+    ASSERT_EQ(0, table.numRows());
     // The moved-from `table` is valid and still has the same number of columns,
     // but they are now empty.
     ASSERT_EQ(1, table.numColumns());
@@ -1373,4 +1398,5 @@ TYPED_TEST(IdTableSubViewTest, subView) {
 
 template class columnBasedIdTable::IdTable<char, 0>;
 template class columnBasedIdTable::IdTable<char, 0,
+                                           VectorWithExtraConstructor<char>>;
                                            VectorWithExtraConstructor<char>>;

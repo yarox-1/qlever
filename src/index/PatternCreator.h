@@ -15,7 +15,6 @@
 #include "global/Pattern.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/ExternalSortFunctors.h"
-#include "util/BufferedVector.h"
 #include "util/CompactStringVector.h"
 #include "util/ExceptionHandling.h"
 #include "util/ExternalOverflowStorage.h"

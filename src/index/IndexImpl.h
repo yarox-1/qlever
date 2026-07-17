@@ -41,8 +41,6 @@
 #include "index/vocabulary/Vocabulary.h"
 #include "parser/RdfParser.h"
 #include "parser/TripleComponent.h"
-#include "util/BufferedVector.h"
-#include "util/CompactStringVector.h"
 #include "util/File.h"
 #include "util/Forward.h"
 #include "util/Iterators.h"

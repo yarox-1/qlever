@@ -22,6 +22,7 @@
 #include <gtest/gtest.h>
 
 #include "../../util/GTestHelpers.h"
+#include "../../util/MmapVectorLegacyFormat.h"
 #include "./VocabularyTestHelpers.h"
 #include "backports/algorithm.h"
 #include "index/vocabulary/VocabularyOnDisk.h"
