@@ -158,15 +158,18 @@ if (NOT _DISABLE_EMSCRIPTEN_PROBLEMATIC_TESTS)
 endif ()
 
 addLinkAndDiscoverTest(ValueIdComparatorsTest qlever_util)
+addLinkAndDiscoverTest(ValueIdComparatorsTest qlever_util)
 
 addLinkAndDiscoverTest(SparqlParserTest sparqlParser engine sparqlExpressions)
 
 addLinkAndDiscoverTest(VariableCounterTest sparqlParser engine)
 
 addLinkAndDiscoverTest(StringUtilsTest qlever_util)
+addLinkAndDiscoverTest(StringUtilsTest qlever_util)
 
 addLinkAndDiscoverTestNoLibs(ConstexprSmallStringTest)
 
+addLinkAndDiscoverTest(CryptographicHashUtilsTest qlever_util)
 addLinkAndDiscoverTest(CryptographicHashUtilsTest qlever_util)
 
 addLinkAndDiscoverTest(CacheTest)
@@ -230,16 +233,17 @@ addLinkAndDiscoverTest(UnionTest engine)
 
 if (SINGLE_TEST_BINARY)
     target_sources(QLeverAllUnitTestsMain PUBLIC TokenTest.cpp TokenTestCtreHelper.cpp)
-    qlever_target_link_libraries(QLeverAllUnitTestsMain sparqlParser qlever_util)
+    qlever_target_link_libraries(QLeverAllUnitTestsMain parser re2 qlever_util)
 else ()
     add_executable(TokenTest TokenTest.cpp TokenTestCtreHelper.cpp)
-    linkAndDiscoverTest(TokenTest sparqlParser qlever_util)
+    linkAndDiscoverTest(TokenTest parser re2 qlever_util)
 endif ()
 
 addLinkAndDiscoverTestNoLibs(RdfParserTest index)
 
 addLinkAndDiscoverTest(MultiColumnJoinTest engine)
 
+addLinkAndDiscoverTest(IdTableTest qlever_util)
 addLinkAndDiscoverTest(IdTableTest qlever_util)
 
 addLinkAndDiscoverTest(TransitivePathTest engine)
@@ -332,18 +336,21 @@ addLinkAndDiscoverTestNoLibs(GeoPointTest rdfTypes)
 
 addLinkAndDiscoverTest(GeoSparqlHelpersTest rdfTypes)
 
-addLinkAndDiscoverTest(GeoSparqlHelpersTest util)
+addLinkAndDiscoverTest(GeoSparqlHelpersTest qlever_util)
 
-addLinkAndDiscoverTest(GeoConvertersTest util)
+addLinkAndDiscoverTest(GeoConvertersTest qlever_util)
 
 addLinkAndDiscoverTest(HttpUtilsTest qlever_util http)
+addLinkAndDiscoverTest(HttpUtilsTest qlever_util http)
 
-addLinkAndDiscoverTest(DateYearDurationTest qlever_util sparqlParser)
+addLinkAndDiscoverTest(DateYearDurationTest qlever_util parser)
 
+addLinkAndDiscoverTest(DurationTest qlever_util)
 addLinkAndDiscoverTest(DurationTest qlever_util)
 
 addLinkAndDiscoverTest(TripleComponentTest)
 
+addLinkAndDiscoverTest(ValueIdTest qlever_util)
 addLinkAndDiscoverTest(ValueIdTest qlever_util)
 
 addLinkAndDiscoverTestNoLibs(LambdaHelpersTest)
@@ -414,6 +421,7 @@ addLinkAndDiscoverTest(AggregateExpressionTest sparqlParser sparqlExpressions in
 addLinkAndDiscoverTest(OnDestructionDontThrowDuringStackUnwindingTest)
 
 addLinkAndDiscoverTest(SparqlExpressionTypesTest sparqlExpressions qlever_util)
+addLinkAndDiscoverTest(SparqlExpressionTypesTest sparqlExpressions qlever_util)
 
 addLinkAndDiscoverTest(LimitOffsetClauseTest)
 
@@ -441,6 +449,7 @@ addLinkAndDiscoverTest(RandomTest)
 
 addLinkAndDiscoverTest(FindUndefRangesTest engine)
 
+addLinkAndDiscoverTest(AddCombinedRowToTableTest engine qlever_util)
 addLinkAndDiscoverTest(AddCombinedRowToTableTest engine qlever_util)
 
 addLinkAndDiscoverTest(CtreHelpersTest)
@@ -488,7 +497,9 @@ addLinkAndDiscoverTest(UpdateFetcherTest http)
 addLinkAndDiscoverTest(MessageSenderTest http)
 
 addLinkAndDiscoverTestNoLibs(CancellationHandleTest qlever_util)
+addLinkAndDiscoverTestNoLibs(CancellationHandleTest qlever_util)
 
+addLinkAndDiscoverTestSerial(ProgressBarTest qlever_util)
 addLinkAndDiscoverTestSerial(ProgressBarTest qlever_util)
 
 addLinkAndDiscoverTest(CachingMemoryResourceTest)
@@ -534,6 +545,7 @@ addLinkAndDiscoverTestNoLibs(InputRangeUtilsTest)
 addLinkAndDiscoverTest(TripleSerializerTest)
 
 addLinkAndDiscoverTest(GeometryInfoTest qlever_util)
+addLinkAndDiscoverTest(GeometryInfoTest qlever_util)
 
 addLinkAndDiscoverTest(QueryRewriteUtilTest engine)
 
@@ -543,6 +555,7 @@ addLinkAndDiscoverTest(TimeTracerTest)
 
 addLinkAndDiscoverTestNoLibs(SourceLocationTest)
 
+addLinkAndDiscoverTest(UnitOfMeasurementTest qlever_util)
 addLinkAndDiscoverTest(UnitOfMeasurementTest qlever_util)
 
 # When the `server` library is not built (Emscripten, see
@@ -561,6 +574,7 @@ addLinkAndDiscoverTestNoLibs(ConstexprMapTest)
 addLinkAndDiscoverTestNoLibs(ParallelExecutorTest)
 
 addLinkAndDiscoverTestNoLibs(IoUringManagerTest qlever_util)
+addLinkAndDiscoverTestNoLibs(IoUringManagerTest qlever_util)
 
 addLinkAndDiscoverTestNoLibs(VariantRangeFilterTest)
 
@@ -577,12 +591,12 @@ addLinkAndDiscoverTestNoLibs(EnumWithStringsTest Boost::program_options)
 
 addLinkAndDiscoverTest(ConstructTripleGeneratorTest engine)
 
-addLinkAndDiscoverTest(ConstructDeduplicatorTest engine)
-
 addLinkAndDiscoverTest(FilesystemHelpersTest qlever_util)
 
 addLinkAndDiscoverTest(LogTest)
 
-addLinkAndDiscoverTest(QueryEventLogTest util)
+addLinkAndDiscoverTest(QueryEventLogTest qlever_util)
 
-addLinkAndDiscoverTest(ResourceMonitorTest util)
+addLinkAndDiscoverTest(MetricsTest metrics)
+
+addLinkAndDiscoverTest(ResourceMonitorTest qlever_util)

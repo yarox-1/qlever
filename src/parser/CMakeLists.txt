@@ -40,4 +40,4 @@ add_library(sparqlParser
         ExternalValuesQuery.cpp
         VariableCounter.cpp
 )
-qlever_target_link_libraries(sparqlParser basicParser antlrParser parserData sparqlExpressions rdfEscaping global qlever_util index rdfTypes)
+qlever_target_link_libraries(parser sparqlParser parserData sparqlExpressions rdfEscaping global re2::re2 qlever_util engine index rdfTypes)

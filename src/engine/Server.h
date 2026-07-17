@@ -37,6 +37,8 @@
 #include "util/json.h"
 #include "util/metrics/Metrics.h"
 #include "util/metrics/ServerMetrics.h"
+#include "util/metrics/Metrics.h"
+#include "util/metrics/ServerMetrics.h"
 
 template <typename Operation>
 CPP_concept QueryOrUpdate =
@@ -72,6 +74,9 @@ class Server {
  public:
   explicit Server(unsigned short port, size_t numThreads,
                   std::string accessToken, const qlever::EngineConfig& config,
+                  bool noAccessCheck = false,
+                  std::shared_ptr<ad_utility::metrics::MetricsReader>
+                      metricsReader = nullptr);
                   bool noAccessCheck = false,
                   std::shared_ptr<ad_utility::metrics::MetricsReader>
                       metricsReader = nullptr);
@@ -115,17 +120,6 @@ class Server {
   // Indicates if an index rebuild is currently in progress so that we prevent
   // triggering this twice.
   std::atomic_bool rebuildInProgress_{false};
-
-  // If set, an index rebuild is triggered automatically after an update
-  // whenever the strategy says so, see `triggerRebuildIfStrategySaysSo`. Set
-  // via the `--rebuild-index-strategy` option of `qlever-server`.
-  std::optional<qlever::RebuildIndexStrategy> rebuildIndexStrategy_;
-
-  // Which `previous.*` index directories to keep after a successful rebuild
-  // (manual or automatic), see `KeepPreviousIndexDirs`. Set via the
-  // `--rebuild-keep-previous-index-dirs` option of `qlever-server`.
-  qlever::KeepPreviousIndexDirs keepPreviousIndexDirs_ =
-      qlever::KeepPreviousIndexDirs::OriginalAndMostRecent;
 
   // MetricsReader for serving the /metrics endpoint. `nullptr` when metrics are
   // disabled (--enable-metrics not passed).

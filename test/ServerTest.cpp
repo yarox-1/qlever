@@ -25,6 +25,7 @@
 #include "util/http/UrlParser.h"
 #include "util/json.h"
 #include "util/metrics/Metrics.h"
+#include "util/metrics/Metrics.h"
 
 using nlohmann::json;
 
@@ -652,6 +653,19 @@ TEST(ServerTest, metricsEndpoint) {
         {{http::field::content_type, "application/sparql-query"}},
         std::move(query));
   };
+  using Label = std::pair<std::string_view, std::string_view>;
+  auto MetricIs = [](std::string_view metric, std::string_view value,
+                     std::optional<Label> label = std::nullopt) {
+    std::string labelText =
+        label.has_value()
+            ? absl::StrCat("{", label->first, "=\"", label->second, "\"}")
+            : "";
+    return testing::HasSubstr(absl::StrCat(metric, labelText, " ", value));
+  };
+  auto IsZero = [&MetricIs](std::string_view metric,
+                            std::optional<Label> label = std::nullopt) {
+    return MetricIs(metric, "0", label);
+  };
   auto ExpectMetricsChange = [&makeServerWithMetrics, &expectMetrics](
                                  auto matcherBefore, auto request,
                                  auto matcherAfter,
@@ -681,20 +695,6 @@ TEST(ServerTest, metricsEndpoint) {
     auto server = makeServerWithMetrics(ad_utility::metrics::initialize(true));
     expectRequiresAccessToken(server);
   }
-  {
-    auto server = makeServerWithMetrics(ad_utility::metrics::initialize(true));
-    // `qlever_build_info` is always present with a value of 1 and carries the
-    // build metadata in its labels.
-    expectMetrics(
-        "accessToken", server, StatusIs(http::status::ok),
-        testing::HasSubstr(
-            "qlever_build_info{compile_time=\"time of compilation not set\","
-            "compiler=\"compiler not set\","
-            "compiler_version=\"compiler version not set\","
-            "cxx_standard=\"c++ standard not set\","
-            "git_hash=\"git short hash not set\","
-            "version=\"project version not set\"} 1"));
-  }
   Label update{"operation", "update"};
   Label query{"operation", "query"};
   Label syntaxError{"type", "syntax"};
@@ -705,8 +705,6 @@ TEST(ServerTest, metricsEndpoint) {
       "qlever_sparql_operation_running";
   std::string_view qleverSparqlOperationErrorsTotal =
       "qlever_sparql_operation_errors_total";
-  std::string_view qleverIndexRebuildInProgress =
-      "qlever_index_rebuild_in_progress";
   ExpectMetricsChange(
       testing::AllOf(IsZero(qleverDeltaTriples),
                      IsZero(qleverSparqlOperationStartedTotal, update),
@@ -731,11 +729,6 @@ TEST(ServerTest, metricsEndpoint) {
                      MetricIs(qleverSparqlOperationStartedTotal, "1", query),
                      IsZero(qleverSparqlOperationRunning, update),
                      IsZero(qleverSparqlOperationRunning, query)));
-  // No rebuild is running during a normal query, so the rebuild-in-progress
-  // gauge reads 0 both before and after.
-  ExpectMetricsChange(IsZero(qleverIndexRebuildInProgress),
-                      QueryRequest("SELECT * WHERE { ?s ?p ?o } LIMIT 10"),
-                      IsZero(qleverIndexRebuildInProgress));
   ExpectMetricsChange(
       IsZero(qleverSparqlOperationErrorsTotal, syntaxError),
       QueryRequest("Foo"),
