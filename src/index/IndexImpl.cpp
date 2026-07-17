@@ -25,7 +25,6 @@
 #include "backports/algorithm.h"
 #include "backports/filesystem.h"
 #include "engine/AddCombinedRowToTable.h"
-#include "global/FileSuffixConstants.h"
 #include "global/RuntimeParameters.h"
 #include "index/Index.h"
 #include "index/IndexFormatVersion.h"
@@ -2204,10 +2203,15 @@ std::packaged_task<void()> computeStatistics(
     // `rebuild-index-scan-num-threads` (several permutations are scanned in
     // parallel, so without the throttle this short phase has a high peak
     // CPU). A value of 0 means "fall back to `lazy-index-scan-num-threads`".
-    auto numThreadsOverride = getRuntimeParameterAsOptional<
-        &RuntimeParameters::rebuildIndexScanNumThreads_>();
+    auto rebuildScanThreads =
+        getRuntimeParameter<&RuntimeParameters::rebuildIndexScanNumThreads_>();
+    std::optional<size_t> numThreadsOverride =
+        rebuildScanThreads == 0 ? std::nullopt
+                                : std::optional<size_t>{rebuildScanThreads};
     auto [reader, tables] = permutation.lazyScanWithUnlimitedReader(
         permutation.getScanSpecAndBlocks(scanSpec, *locatedTriplesSharedState),
+        additionalColumns, cancellationHandle, *locatedTriplesSharedState,
+        numThreadsOverride);
         additionalColumns, cancellationHandle, *locatedTriplesSharedState,
         numThreadsOverride);
     std::optional<Id> lastCol0 = std::nullopt;
