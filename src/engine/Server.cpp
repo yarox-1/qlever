@@ -835,10 +835,10 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     // structured binding is not destroyed when the coroutine frame is
     // destroyed while suspended (gcc.gnu.org bug 124584).
     auto preparedOp = prepareOperation(
-        operationName, operationString, std::move(messageSender), parameters,
-        timeLimit.value(), accessTokenOk, clientIp);
-    auto& [makeQec, cancellationHandle, cancelTimeoutOnDestruction] =
-        preparedOp;
+        indexAndViews, operationName, operationString, std::move(messageSender),
+        parameters, timeLimit.value(), accessTokenOk, clientIp);
+    auto& [qecPtr, cancellationHandle, cancelTimeoutOnDestruction] = preparedOp;
+    auto& qec = *qecPtr;
     try {
       if (!ql::ranges::all_of(operations, expectedOperation)) {
         throw std::runtime_error(absl::StrCat(
