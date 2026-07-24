@@ -37,18 +37,14 @@ bool strIsLangTag(const std::string& strLangTag);
 // Implements a case insensitive `language-range` to `language-tag`comparison.
 bool isLanguageMatch(std::string& languageTag, std::string& languageRange);
 
-// Encode the single Unicode `codepoint` as UTF-8 and append the resulting bytes
-// to `output`. Codepoints that are not valid Unicode scalar values (larger than
-// 0x10FFFF, or in the surrogate range 0xD800-0xDFFF) are encoded as the Unicode
-// replacement character U+FFFD. This function does not depend on ICU.
-void utf8EncodeCodepoint(uint32_t codepoint, std::string& output);
-
-// Convert a UTF-8 string to lowercase. `localeName` is the ICU locale name used
-// for locale-specific case folding (e.g. "tr" for Turkish); the default empty
-// string uses the locale-independent root rules. If `useICU == false`, only
-// ASCII characters are lowercased (each byte is treated individually) and
-// `localeName` is ignored.
-template <bool useICU = useICUDefault>
+/*
+ * @brief convert a UTF-8 String to lowercase
+ * @param s UTF-8 encoded string
+ * @param localeName The ICU locale name used for locale-specific case folding
+ * (e.g. "tr" for Turkish). The default empty string uses the locale-independent
+ * root rules.
+ * @return The lowercase version of s, also encoded as UTF-8
+ */
 std::string utf8ToLower(std::string_view s, const char* localeName = "");
 
 // Get the uppercase value. For details see `utf8ToLower` above.

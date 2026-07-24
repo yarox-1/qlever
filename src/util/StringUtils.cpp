@@ -170,9 +170,12 @@ namespace detail {
 template <typename F>
 std::string utf8StringTransform(std::string_view s, const char* localeName,
                                 F transformation) {
+std::string utf8StringTransform(std::string_view s, const char* localeName,
+                                F transformation) {
   std::string result;
   icu::StringByteSink<std::string> sink(&result);
   UErrorCode err = U_ZERO_ERROR;
+  transformation(localeName, 0,
   transformation(localeName, 0,
                  icu::StringPiece{s.data(), static_cast<int32_t>(s.size())},
                  sink, nullptr, err);
@@ -201,36 +204,20 @@ std::string asciiStringTransform(std::string_view s,
 }  // namespace
 
 // ____________________________________________________________________________
-template <bool useICU>
 std::string utf8ToLower(std::string_view s, const char* localeName) {
-  if constexpr (useICU) {
-    QLEVER_UNICODE_ONLY("utf8ToLower", {
-      return detail::utf8StringTransform(s, localeName, [](auto&&... args) {
-        return icu::CaseMap::utf8ToLower(AD_FWD(args)...);
-      });
-    });
-  } else {
-    return asciiStringTransform(
-        s, localeName, [](unsigned char c) { return std::tolower(c); });
-  }
+  return detail::utf8StringTransform(s, localeName, [](auto&&... args) {
+    return icu::CaseMap::utf8ToLower(AD_FWD(args)...);
+  });
 }
 // Explicit instantiations for both configurations.
 template std::string utf8ToLower<true>(std::string_view, const char*);
 template std::string utf8ToLower<false>(std::string_view, const char*);
 
 // ____________________________________________________________________________
-template <bool useICU>
-std::string utf8ToUpper(std::string_view s, const char* localeName) {
-  if constexpr (useICU) {
-    QLEVER_UNICODE_ONLY("utf8ToUpper", {
-      return detail::utf8StringTransform(s, localeName, [](auto&&... args) {
-        return icu::CaseMap::utf8ToUpper(AD_FWD(args)...);
-      });
-    });
-  } else {
-    return asciiStringTransform(
-        s, localeName, [](unsigned char c) { return std::toupper(c); });
-  }
+std::string utf8ToUpper(std::string_view s) {
+  return detail::utf8StringTransform(s, "", [](auto&&... args) {
+    return icu::CaseMap::utf8ToUpper(AD_FWD(args)...);
+  });
 }
 // Explicit instantiations for both configurations.
 template std::string utf8ToUpper<true>(std::string_view, const char*);
