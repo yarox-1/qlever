@@ -264,22 +264,12 @@ TEST(MergeVocabulary, mergeVocabularyAssertion) {
 
   std::string basePath = gtestCurrentTestName();
 
-  auto writeUnorderedFile = [](const auto& path) {
-    ad_utility::serialization::FileWriteSerializer partialVocab(path);
-    // Intentionally in wrong order.
-    std::array<std::string_view, 3> strings{"\"c\"", "\"b\"", "\"a\""};
-    partialVocab << strings.size();
-    size_t localIdx = 0;
-    for (auto s : strings) {
-      partialVocab << s;
-      partialVocab << false;
-      partialVocab << localIdx;
-      localIdx++;
-    }
-  };
-
-  writeUnorderedFile(absl::StrCat(basePath, PARTIAL_VOCAB_WORDS_INFIX, 0));
-  writeUnorderedFile(absl::StrCat(basePath, PARTIAL_VOCAB_WORDS_INFIX, 1));
+  // Intentionally in wrong order, so that the merge detects a violated order.
+  std::array<std::string_view, 3> unorderedWords{"\"c\"", "\"b\"", "\"a\""};
+  writePartialVocabularyFile(
+      absl::StrCat(basePath, PARTIAL_VOCAB_WORDS_INFIX, 0), unorderedWords);
+  writePartialVocabularyFile(
+      absl::StrCat(basePath, PARTIAL_VOCAB_WORDS_INFIX, 1), unorderedWords);
 
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       mergeVocabulary(

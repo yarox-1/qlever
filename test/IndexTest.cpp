@@ -526,6 +526,33 @@ TEST(IndexTest, processTriple) {
 }
 
 // _____________________________________________________________________________
+// The regexes passed to `setBlankNodeIriRegexes` must describe full IRIs (and
+// therefore have to start with `<`) and must be valid regular expressions;
+// otherwise the setter throws. Valid regexes are compiled and stored.
+TEST(IndexTest, setBlankNodeIriRegexesRequiresValidIriPatterns) {
+  IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
+
+  // A regex that does not start with `<` cannot describe a (full) IRI and is
+  // rejected, even if other regexes in the same call are valid.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      index.setBlankNodeIriRegexes({"<http://ex/ok.*>", "http://ex/bad.*"}),
+      ::testing::HasSubstr("must therefore start with `<`"));
+
+  // A regex that is not a valid regular expression is reported with a
+  // user-readable message (here: an unclosed group).
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      index.setBlankNodeIriRegexes({"<http://ex/(unclosed"}),
+      ::testing::HasSubstr("not a valid regular expression"));
+
+  // Valid IRI regexes are accepted, compiled, and stored (in order).
+  index.setBlankNodeIriRegexes({"<http://ex/bn_.*>", "<http://ex/other>"});
+  const auto& regexes = index.getBlankNodeIriRegexes();
+  ASSERT_EQ(regexes.size(), 2);
+  EXPECT_EQ(regexes.at(0)->pattern(), "<http://ex/bn_.*>");
+  EXPECT_EQ(regexes.at(1)->pattern(), "<http://ex/other>");
+}
+
+// _____________________________________________________________________________
 TEST(IndexTest, ZeroCopyVocabularyBlob) {
   IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
   auto& vocab = index.getNonConstVocabForTesting();
