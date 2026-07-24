@@ -18,6 +18,7 @@
 #include "./util/IdTestHelpers.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
+#include "util/CompilerWarnings.h"
 #include "util/TypeIdentity.h"
 
 using namespace ad_utility::testing;
