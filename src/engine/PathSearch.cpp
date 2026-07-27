@@ -441,17 +441,16 @@ PathsLimited PathSearch::allPaths(ql::span<const Id> sources,
       targetSet.insert(target.getBits());
     }
     for (auto source : sources) {
-      for (const auto& path : findPaths(source, targetSet, binSearch,
-                                        numPathsPerTarget, maxDepth)) {
-        paths.push_back(path);
+      for (auto& path : findPaths(source, targetSet, binSearch,
+                                  numPathsPerTarget, maxDepth)) {
+        paths.push_back(std::move(path));
       }
     }
   } else {
     for (size_t i = 0; i < sources.size(); i++) {
-      for (const auto& path :
-           findPaths(sources[i], {targets[i].getBits()}, binSearch,
-                     numPathsPerTarget, maxDepth)) {
-        paths.push_back(path);
+      for (auto& path : findPaths(sources[i], {targets[i].getBits()}, binSearch,
+                                  numPathsPerTarget, maxDepth)) {
+        paths.push_back(std::move(path));
       }
     }
   }

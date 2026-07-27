@@ -24,7 +24,7 @@
 
 #include "engine/Result.h"
 #include "engine/SpatialJoin.h"
-#include "rdfTypes/GeoSparqlHelpers.h"
+#include "util/GeoSparqlHelpers.h"
 #include "util/VectorWithMemoryLimit.h"
 
 namespace BoostGeometryNamespace {
@@ -328,6 +328,7 @@ class SpatialJoinAlgorithms {
   size_t numFailedParsedGeometries_ = 0;
 
   // this vector stores the geometries, which have already been parsed
+  ad_utility::VectorWithMemoryLimit<AnyGeometry> geometries_;
   ad_utility::VectorWithMemoryLimit<AnyGeometry> geometries_;
 
   // After adding the given amount of rows to the WKT parser, it will be checked
