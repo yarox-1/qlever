@@ -723,14 +723,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
                       "Deleting a materialized view requires a name to be set "
                       "via the 'view-name' parameter");
 
-    // Snapshot again instead of using `indexAndViews` from the beginning of
-    // this function (see `clear-delta-triples` above for the same pattern), so
-    // that we delete the view from the index that is currently being served and
-    // not from a stale one that a concurrent rebuild has swapped out in the
-    // meantime. Deleting from a stale manager is not unsafe (the rebuild called
-    // `MaterializedViewsManager::retireOnDiskFiles` on it, which makes
-    // `deleteView` throw), it would just needlessly fail.
-    indexAndViewsSnapshot()->materializedViewsManager_.deleteView(name.value());
+    indexAndViews->materializedViewsManager_.deleteView(name.value());
 
     // Construct simple response JSON.
     nlohmann::json json{{"materialized-view-deleted", name.value()}};

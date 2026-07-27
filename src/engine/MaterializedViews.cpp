@@ -25,7 +25,6 @@
 #include "engine/VariableToColumnMap.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "global/Constants.h"
-#include "global/FileSuffixConstants.h"
 #include "index/DeltaTriples.h"
 #include "index/ExternalSortFunctors.h"
 #include "libqlever/Qlever.h"
@@ -262,6 +261,7 @@ MaterializedViewWriter::RangeOfIdTables MaterializedViewWriter::getSortedBlocks(
 IndexMetaData MaterializedViewWriter::writePermutation(
     RangeOfIdTables sortedBlocksSPO) const {
   std::string spoFilename = absl::StrCat(getFilenameBase(), VIEW_SPO_SUFFIX);
+  std::string spoFilename = absl::StrCat(getFilenameBase(), VIEW_SPO_SUFFIX);
   auto spoWriter = std::make_unique<CompressedRelationWriter>(
       numCols(), ad_utility::File{spoFilename, "w"},
       UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN);
@@ -310,6 +310,7 @@ void MaterializedViewWriter::writeViewMetadata() const {
         }) |
         ::ranges::to<std::vector<nlohmann::json>>())},
       {"query", parsedQuery_._originalString}};
+  ad_utility::makeOfstream(absl::StrCat(getFilenameBase(), VIEW_INFO_SUFFIX))
   ad_utility::makeOfstream(absl::StrCat(getFilenameBase(), VIEW_INFO_SUFFIX))
       << viewInfo.dump() << std::endl;
 }
@@ -362,7 +363,7 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
               << std::endl;
   auto filename = getFilenameBase(onDiskBase_, name_);
 
-  auto metadataFilename = absl::StrCat(filename, ".viewinfo.json");
+  auto metadataFilename = absl::StrCat(filename, VIEW_INFO_SUFFIX);
   if (!ql::filesystem::exists(metadataFilename)) {
     throw std::runtime_error(
         absl::StrCat("The materialized view '", name_, "' does not exist."));
@@ -455,17 +456,31 @@ MaterializedViewsManager::loadViewIntoLockedState(const std::string& name,
                                                   LoadedViews& state) const {
   if (auto it = state.views_.find(name); it != state.views_.end()) {
     return it->second;
+std::shared_ptr<MaterializedView>
+MaterializedViewsManager::loadViewIntoLockedState(const std::string& name,
+                                                  LoadedViews& state) const {
+  if (auto it = state.views_.find(name); it != state.views_.end()) {
+    return it->second;
   }
   auto view = std::make_shared<MaterializedView>(onDiskBase_, name);
   view->connectPermutationBackReference();
+  state.views_.insert({name, view});
   state.views_.insert({name, view});
   // If we would analyze the view at the time of writing and (de)serialize an
   // analysis result here, we could not extend query analysis without rewriting
   // all views. Therefore query analysis is performed when loading views.
   if (state.queryPatternCache_.analyzeView(view)) {
+  if (state.queryPatternCache_.analyzeView(view)) {
     AD_LOG_INFO << "The materialized view '" << name
                 << "' was added to the query pattern cache." << std::endl;
   }
+  return view;
+}
+
+// _____________________________________________________________________________
+void MaterializedViewsManager::loadView(const std::string& name) const {
+  auto lock = loadedViews_.wlock();
+  loadViewIntoLockedState(name, *lock);
   return view;
 }
 
@@ -490,13 +505,6 @@ void MaterializedViewsManager::unloadViewIfLoaded(
 void MaterializedViewsManager::deleteView(const std::string& name) const {
   MaterializedView::throwIfInvalidName(name);
   auto filenameBase = MaterializedView::getFilenameBase(onDiskBase_, name);
-
-  // Hold this lock for the whole sequence below, so that we can not delete
-  // files that an index rebuild has already replaced by the files of the
-  // rebuilt index (see `retireOnDiskFiles`). NOTE: It has to be acquired before
-  // `loadedViews_` below.
-  auto notRetiredLock = lockIfNotRetired(
-      absl::StrCat("delete the materialized view '", name, "'"));
 
   // Hold the lock for the whole check-unload-delete sequence below, so that a
   // concurrent `loadView`/`getView` call for the same view can not reload it
@@ -532,6 +540,8 @@ void MaterializedViewsManager::deleteView(const std::string& name) const {
 // _____________________________________________________________________________
 std::shared_ptr<const MaterializedView> MaterializedViewsManager::getView(
     const std::string& name) const {
+  auto lock = loadedViews_.wlock();
+  return loadViewIntoLockedState(name, *lock);
   auto lock = loadedViews_.wlock();
   return loadViewIntoLockedState(name, *lock);
 }
