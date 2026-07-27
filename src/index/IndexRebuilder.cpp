@@ -81,19 +81,8 @@ LocalVocabMapping mergeVocabs(const std::string& vocabularyName,
                               const std::function<void(size_t)>& progress) {
   auto vocabWriter = vocab.makeWordWriterPtr(vocabularyName);
   LocalVocabMapping localVocabMapping;
-  // Report the number of written words to `progress` in batches: each report
-  // is a mutex-protected addition on a shared counter (see
-  // `ad_utility::ConcurrentProgressBar`), so reporting every single word
-  // would be needlessly expensive. The exact batch size is not important.
-  size_t wordsSinceLastProgress = 0;
-  auto noteWord = [&progress, &wordsSinceLastProgress]() {
-    if (++wordsSinceLastProgress == 65536) {
-      progress(wordsSinceLastProgress);
-      wordsSinceLastProgress = 0;
-    }
-  };
-  auto writeWordFromVocab = [&vocab, &vocabWriter,
-                             &noteWord](const IndexAndWord& indexAndWord) {
+  auto writeWordFromVocab = [&vocab,
+                             &vocabWriter](const IndexAndWord& indexAndWord) {
     const auto& [_, word] = indexAndWord;
     (*vocabWriter)(word, vocab.shouldBeExternalized(word));
     noteWord();
@@ -112,13 +101,19 @@ LocalVocabMapping mergeVocabs(const std::string& vocabularyName,
   ql::ranges::merge(
       vocab.scanAll(), insertInfo,
       ad_utility::IteratorForAssigmentOperator{writer}, {},
+      vocab.scanAll(), insertInfo,
+      ad_utility::IteratorForAssigmentOperator{writer}, {},
       // The tags ensure that the local vocab entries are sorted before all the
       // original vocab entries, even if they share the same vocab index as
       // insertion position.
       [tag = 1](const IndexAndWord& indexAndWord) {
         return std::tie(indexAndWord.index_, tag);
       },
+      [tag = 1](const IndexAndWord& indexAndWord) {
+        return std::tie(indexAndWord.index_, tag);
+      },
       [tag = 0](const InsertionInfo& info) {
+        return std::tie(info.insertionPosition_.get(), tag);
         return std::tie(info.insertionPosition_.get(), tag);
       });
   if (wordsSinceLastProgress > 0) {
