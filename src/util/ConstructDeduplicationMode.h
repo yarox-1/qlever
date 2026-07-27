@@ -40,7 +40,7 @@ namespace ad_utility {
 // exempt from deduplication, which is not an approximation: every solution
 // instantiates a template blank node as a fresh blank node, so two such
 // triples are never duplicates of each other.
-// `Lru` keeps a single LRU cache of the `capacity_` most recently seen
+// `BatchWise` keeps a single LRU cache of the `batchSize_` most recently seen
 // unique triple keys (shared across all template triples and keyed on the full
 // instantiated triple), and suppresses a triple only if its key is still in
 // that cache. Memory is bounded (O(capacity_)). Because the cache evicts its
