@@ -199,9 +199,8 @@ void NamedCachedQueryBlobManager::deserialize(
         reader >> metadataJson;
         indexImpl.applyConfiguration(nlohmann::json::parse(metadataJson));
         indexImpl.loadVocabularyFromZeroCopyBlob(reader);
-        qlever.namedResultCache_.readFromSerializer(
-            reader, qlever.allocator_,
-            indexAndViews->index_.getLocalVocabContext());
+        qlever.namedResultCache_.readFromSerializer(reader, qlever.allocator_,
+                                                    indexAndViews->index_);
       });
 }
 

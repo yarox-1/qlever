@@ -7,6 +7,8 @@
 #ifndef QLEVER_SRC_LIBQLEVER_QLEVER_H
 #define QLEVER_SRC_LIBQLEVER_QLEVER_H
 
+#include <gtest/gtest_prod.h>
+
 #include <boost/optional.hpp>
 #include <memory>
 #include <optional>
@@ -15,10 +17,8 @@
 #include <utility>
 #include <vector>
 
-#include "backports/filesystem.h"
 #include "backports/memory_resource.h"
 #include "backports/span.h"
-#include "engine/KeepPreviousIndexDirs.h"
 #include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
 #include "engine/NamedResultCacheSerializer.h"
@@ -30,6 +30,7 @@
 #include "index/Index.h"
 #include "index/IndexRebuilderTypes.h"
 #include "index/InputFileSpecification.h"
+#include "libqlever/NamedCachedQueryBlobManager.h"
 #include "libqlever/NamedCachedQueryBlobManager.h"
 #include "libqlever/QleverTypes.h"
 #include "util/AllocatorWithLimit.h"
@@ -358,11 +359,27 @@ class Qlever {
 
   FRIEND_TEST(LibQlever, swapIndexAndViewsThrowsWithNonEmptyNamedCache);
 
+  // Handles the (de)serialization of the vocabulary and the `NamedResultCache`
+  // to and from a compressed blob (see the delegating public methods
+  // `serializeVocabAndNamedCacheToCompressedBlob` /
+  // `deserializeVocabAndNamedCacheFromCompressedBlob` below). It is a friend of
+  // this class so that it can access the internals it needs.
+  NamedCachedQueryBlobManager blobManager_;
+  friend class NamedCachedQueryBlobManager;
+
+  FRIEND_TEST(LibQlever, swapIndexAndViewsThrowsWithNonEmptyNamedCache);
+
  public:
   // Build an index, using an `IndexBuilderConfig` as explained above.
   static void buildIndex(IndexBuilderConfig config);
 
   // Create a QLever instance for querying using an `EngineConfig` as
+  // explained above. If `skipLoading` is true, no index is loaded from disk
+  // (in particular, none of the on-disk index files, not even the vocabulary
+  // or the `.meta-data.json`, need to exist); the instance must then be
+  // populated from a blob via `deserializeVocabAndNamedCacheFromCompressedBlob`
+  // before it can answer queries.
+  explicit Qlever(const EngineConfig& config, bool skipLoading = false);
   // explained above. If `skipLoading` is true, no index is loaded from disk
   // (in particular, none of the on-disk index files, not even the vocabulary
   // or the `.meta-data.json`, need to exist); the instance must then be
@@ -504,10 +521,6 @@ class Qlever {
   // delete its files from disk. Throws if the view does not exist.
   void deleteMaterializedView(std::string name) const;
 
-  // Delete the materialized view with the given name: unload it if loaded and
-  // delete its files from disk. Throws if the view does not exist.
-  void deleteMaterializedView(std::string name) const;
-
   // Serialize the index metadata JSON, the vocabulary, and the
   // `NamedResultCache` of this instance into a single, self-contained,
   // ZSTD-compressed blob that can later be loaded via
@@ -533,9 +546,6 @@ class Qlever {
     // dedicated move operations.
     blobManager_.deserialize(*this, blob, allocator);
   }
-
-  // Clear the query result cache.
-  void clearCache() { cache_.clearAll(); }
 
   // Create a Query Execution Context needed for execution of single SPARQL
   // query. Use an explicitly snapshotted `IndexAndViews` to make sure we have a
@@ -566,7 +576,19 @@ class Qlever {
   // therefore clear the named result cache first. (This is a deliberately
   // minimally invasive guard; full support for keeping the named result cache
   // across index snapshots is future work.)
+  //
+  // PRECONDITION: The `NamedResultCache` must be empty. Its entries reference
+  // IDs (and possibly zero-copy views) that are only valid for the specific
+  // index snapshot they were created against; swapping in a different index
+  // would silently invalidate them. Callers that want to swap the index must
+  // therefore clear the named result cache first. (This is a deliberately
+  // minimally invasive guard; full support for keeping the named result cache
+  // across index snapshots is future work.)
   void swapIndexAndViews(std::shared_ptr<IndexAndViews> indexAndViews) {
+    AD_CONTRACT_CHECK(
+        namedResultCache_.numEntries() == 0,
+        "The index snapshot must not be swapped while the named result cache "
+        "is not empty");
     AD_CONTRACT_CHECK(
         namedResultCache_.numEntries() == 0,
         "The index snapshot must not be swapped while the named result cache "
