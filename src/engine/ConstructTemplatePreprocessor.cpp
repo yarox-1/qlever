@@ -11,7 +11,6 @@
 
 #include <absl/strings/str_cat.h>
 
-#include "index/TripleComponentConversions.h"
 #include "parser/RdfParser.h"
 #include "parser/TokenizerCtre.h"
 #include "parser/TripleComponent.h"
@@ -27,7 +26,7 @@ namespace qlever::constructExport {
 // used for the deduplication of CONSTRUCT results.
 ValueId ConstructTemplatePreprocessor::resolveConstantDedupId(
     TripleComponent tripleComponent) {
-  return toValueId(std::move(tripleComponent), index_, localVocab_);
+  return std::move(tripleComponent).toValueId(index_, localVocab_);
 }
 
 namespace {
@@ -43,6 +42,11 @@ bool tripleContainsBlankNode(const PreprocessedTriple& triple) {
 // _____________________________________________________________________________
 std::optional<PreprocessedTerm> ConstructTemplatePreprocessor::preprocessIri(
     const Iri& iri) {
+  ValueId dedupId = resolveConstantDedupId(TripleComponent{iri});
+  return PrecomputedConstant{
+      .evaluatedTerm_ =
+          std::make_shared<const EvaluatedTermData>(iri.toSparql(), nullptr),
+      .dedupId_ = dedupId};
   ValueId dedupId = resolveConstantDedupId(TripleComponent{iri});
   return PrecomputedConstant{
       .evaluatedTerm_ =
@@ -72,10 +76,30 @@ ConstructTemplatePreprocessor::preprocessLiteral(const Literal& literal,
       .evaluatedTerm_ =
           std::make_shared<const EvaluatedTermData>(literal.literal(), nullptr),
       .dedupId_ = dedupId};
+  // A literal is only legal in OBJECT position; per SPARQL 1.1 §16.2 a template
+  // instantiation yielding a literal in subject/predicate position produces no
+  // RDF triple, so we return `nullopt` to drop the triple. For the object we
+  // use the full Turtle object parser to handle all cases correctly, in
+  // particular Literals with datatypes like `xsd:integer` which are folded into
+  // the ID.
+  if (role != PositionInTriple::OBJECT) {
+    return std::nullopt;
+  }
+  TripleComponent parsedObject =
+      // TODO: Use only a single `Literal` class in all of QLever.
+      RdfStringParser<TurtleParser<TokenizerCtre>>::parseTripleObject(
+          literal.toSparql());
+  ValueId dedupId = resolveConstantDedupId(std::move(parsedObject));
+  return PrecomputedConstant{
+      .evaluatedTerm_ =
+          std::make_shared<const EvaluatedTermData>(literal.literal(), nullptr),
+      .dedupId_ = dedupId};
 }
 
 // _____________________________________________________________________________
 std::optional<PreprocessedTerm>
+ConstructTemplatePreprocessor::preprocessVariable(const Variable& variable) {
+  if (auto opt = ad_utility::findOptional(variableColumns_, variable)) {
 ConstructTemplatePreprocessor::preprocessVariable(const Variable& variable) {
   if (auto opt = ad_utility::findOptional(variableColumns_, variable)) {
     return PrecomputedVariable{opt->columnIndex_};
@@ -86,6 +110,9 @@ ConstructTemplatePreprocessor::preprocessVariable(const Variable& variable) {
 // _____________________________________________________________________________
 std::optional<PreprocessedTerm>
 ConstructTemplatePreprocessor::preprocessBlankNode(const BlankNode& blankNode) {
+  return PrecomputedBlankNode{
+      .prefix_ = blankNode.isGenerated() ? "_:g" : "_:u",
+      .suffix_ = absl::StrCat("_", blankNode.label())};
   return PrecomputedBlankNode{
       .prefix_ = blankNode.isGenerated() ? "_:g" : "_:u",
       .suffix_ = absl::StrCat("_", blankNode.label())};
@@ -110,17 +137,38 @@ ConstructTemplatePreprocessor::preprocessTermImpl(const GraphTerm& term,
           static_assert(ad_utility::alwaysFalse<T>);
         }
       });
+std::optional<PreprocessedTerm>
+ConstructTemplatePreprocessor::preprocessTermImpl(const GraphTerm& term,
+                                                  PositionInTriple role) {
+  return term.visit(
+      [this, &role](const auto& t) -> std::optional<PreprocessedTerm> {
+        using T = std::decay_t<decltype(t)>;
+        if constexpr (std::is_same_v<T, Iri>) {
+          return preprocessIri(t);
+        } else if constexpr (std::is_same_v<T, Literal>) {
+          return preprocessLiteral(t, role);
+        } else if constexpr (std::is_same_v<T, Variable>) {
+          return preprocessVariable(t);
+        } else if constexpr (std::is_same_v<T, BlankNode>) {
+          return preprocessBlankNode(t);
+        } else {
+          static_assert(ad_utility::alwaysFalse<T>);
+        }
+      });
 }
 
 // _____________________________________________________________________________
 std::optional<PreprocessedTriple>
 ConstructTemplatePreprocessor::preprocessTriple(
     const std::array<GraphTerm, NUM_TRIPLE_POSITIONS>& triple) {
+    const std::array<GraphTerm, NUM_TRIPLE_POSITIONS>& triple) {
   PreprocessedTriple preprocessedTriple;
   for (size_t pos = 0; pos < NUM_TRIPLE_POSITIONS; ++pos) {
     auto role = static_cast<PositionInTriple>(pos);
     auto preprocessed = preprocessTermImpl(triple.at(pos), role);
+    auto preprocessed = preprocessTermImpl(triple.at(pos), role);
     if (!preprocessed) return std::nullopt;
+    preprocessedTriple.at(pos) = std::move(*preprocessed);
     preprocessedTriple.at(pos) = std::move(*preprocessed);
   }
   return preprocessedTriple;
@@ -147,7 +195,27 @@ std::optional<PreprocessedTerm> ConstructTemplatePreprocessor::preprocessTerm(
 // _____________________________________________________________________________
 PreprocessedConstructTemplate ConstructTemplatePreprocessor::run(
     const Triples& templateTriples) && {
+    const Triples& templateTriples, const VariableToColumnMap& variableColumns,
+    const Index& index) {
+  return ConstructTemplatePreprocessor{variableColumns, index}.run(
+      templateTriples);
+}
+
+// _____________________________________________________________________________
+std::optional<PreprocessedTerm> ConstructTemplatePreprocessor::preprocessTerm(
+    const GraphTerm& term, PositionInTriple role,
+    const VariableToColumnMap& variableColumns, const Index& index,
+    LocalVocab& localVocabForConstants) {
+  return ConstructTemplatePreprocessor{variableColumns, index,
+                                       localVocabForConstants}
+      .preprocessTermImpl(term, role);
+}
+
+// _____________________________________________________________________________
+PreprocessedConstructTemplate ConstructTemplatePreprocessor::run(
+    const Triples& templateTriples) && {
   for (const auto& triple : templateTriples) {
+    auto preprocessedTriple = preprocessTriple(triple);
     auto preprocessedTriple = preprocessTriple(triple);
     if (!preprocessedTriple) continue;
 
@@ -160,13 +228,19 @@ PreprocessedConstructTemplate ConstructTemplatePreprocessor::run(
              *preprocessedTriple)) {
       if (seenColumns_.insert(var.columnIndex_).second) {
         result_.uniqueVariableColumns_.push_back(var.columnIndex_);
+      if (seenColumns_.insert(var.columnIndex_).second) {
+        result_.uniqueVariableColumns_.push_back(var.columnIndex_);
       }
     }
     result_.tripleContainsBlankNode_.push_back(
         tripleContainsBlankNode(*preprocessedTriple));
     result_.preprocessedTriples_.push_back(std::move(*preprocessedTriple));
+    result_.tripleContainsBlankNode_.push_back(
+        tripleContainsBlankNode(*preprocessedTriple));
+    result_.preprocessedTriples_.push_back(std::move(*preprocessedTriple));
   }
 
+  return std::move(result_);
   return std::move(result_);
 }
 
