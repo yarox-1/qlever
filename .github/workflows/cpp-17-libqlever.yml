@@ -110,7 +110,8 @@ jobs:
                 -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
                 -DUSE_PARALLEL=true \
                 -DUSE_PRECOMPILED_HEADERS=OFF \
-                -DREDUCED_FEATURE_SET_FOR_CPP17=ON
+                -DREDUCED_FEATURE_SET_FOR_CPP17=ON \
+                -DQLEVER_NO_UNICODE=ON
 
               # Run backport-using-enum on all src/ files containing 'using enum'.
               # We deliberately also attempt files that are not valid in the

@@ -448,8 +448,11 @@ function(qlever_target_link_libraries target)
         set(QLEVER_BOOST_FILESYSTEM_LIB "")
     endif()
     target_link_libraries(${target} ${ARGN} absl::compare absl::flat_hash_map
-            absl::flat_hash_set absl::strings absl::str_format ICU::uc
-            ICU::i18n OpenSSL::SSL OpenSSL::Crypto GTest::gtest GTest::gmock fsst nlohmann_json::nlohmann_json Boost::container ${QLEVER_BOOST_FILESYSTEM_LIB} uriparser)
+            absl::flat_hash_set absl::strings absl::str_format
+            OpenSSL::SSL OpenSSL::Crypto GTest::gtest GTest::gmock fsst nlohmann_json::nlohmann_json Boost::container ${QLEVER_BOOST_FILESYSTEM_LIB} uriparser)
+    if (NOT QLEVER_NO_UNICODE)
+      target_link_libraries(${target} ICU::uc ICU::i18n)
+    endif()
 
     # memorySize is a utility library for defining memory sizes.
     if (NOT ${target} STREQUAL "memorySize")
