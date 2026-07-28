@@ -653,19 +653,6 @@ TEST(ServerTest, metricsEndpoint) {
         {{http::field::content_type, "application/sparql-query"}},
         std::move(query));
   };
-  using Label = std::pair<std::string_view, std::string_view>;
-  auto MetricIs = [](std::string_view metric, std::string_view value,
-                     std::optional<Label> label = std::nullopt) {
-    std::string labelText =
-        label.has_value()
-            ? absl::StrCat("{", label->first, "=\"", label->second, "\"}")
-            : "";
-    return testing::HasSubstr(absl::StrCat(metric, labelText, " ", value));
-  };
-  auto IsZero = [&MetricIs](std::string_view metric,
-                            std::optional<Label> label = std::nullopt) {
-    return MetricIs(metric, "0", label);
-  };
   auto ExpectMetricsChange = [&makeServerWithMetrics, &expectMetrics](
                                  auto matcherBefore, auto request,
                                  auto matcherAfter,

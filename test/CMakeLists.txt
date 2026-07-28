@@ -603,4 +603,6 @@ addLinkAndDiscoverTest(QueryEventLogTest qlever_util)
 
 addLinkAndDiscoverTest(MetricsTest metrics)
 
+addLinkAndDiscoverTest(InstrumentedExecutorTest metrics)
+
 addLinkAndDiscoverTest(ResourceMonitorTest qlever_util)
