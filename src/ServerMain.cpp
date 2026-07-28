@@ -264,6 +264,17 @@ int main(int argc, char** argv) {
       "Enable metrics collection and expose a Prometheus /metrics endpoint on "
       "the main server port. Accessing the endpoint requires a valid access "
       "token.");
+  std::vector<std::string> runtimeParameterAssignments;
+  add("set-runtime-parameter",
+      po::value<std::vector<std::string>>(&runtimeParameterAssignments)
+          ->composing(),
+      "Set any runtime parameter at startup, in the form <name>=<value>, for "
+      "example `--set-runtime-parameter default-query-timeout=300s`. Can be "
+      "given multiple times. Use `--set-runtime-parameter help` to list all "
+      "runtime parameters together with their default values. The parameters "
+      "can also be changed while the server is running, via the API. If a "
+      "parameter can also be set by one of the dedicated options above, the "
+      "value given here wins.");
   po::variables_map optionsMap;
 
   try {
@@ -298,6 +309,23 @@ int main(int argc, char** argv) {
               << ", compiled on " << qlever::version::DatetimeOfCompilation
               << " using git hash " << qlever::version::GitShortHash << EMPH_OFF
               << std::endl;
+
+  // Apply the `--set-runtime-parameter` assignments. This runs after
+  // `po::notify` above, so for parameters that can also be set by a dedicated
+  // option (like `--service-max-redirects`), the value given here wins. A bad
+  // name or value fails the startup with a readable message, before the index
+  // is loaded.
+  for (const auto& assignment : runtimeParameterAssignments) {
+    try {
+      globalRuntimeParameters.wlock()->setFromAssignment(assignment);
+    } catch (const std::exception& e) {
+      AD_LOG_ERROR << "Invalid argument to --set-runtime-parameter: "
+                   << e.what() << std::endl;
+      return EXIT_FAILURE;
+    }
+    AD_LOG_INFO << "Runtime parameter set from the command line: " << assignment
+                << std::endl;
+  }
 
   try {
     // Samples RSS and CPU usage, starting before the index is loaded.
