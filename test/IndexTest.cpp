@@ -23,11 +23,18 @@
 #include "./util/RuntimeParametersTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "CompilationInfo.h"
+#include "backports/StartsWithAndEndsWith.h"
+#include "backports/algorithm.h"
 #include "backports/filesystem.h"
+#include "engine/MaterializedViews.h"
+#include "global/Constants.h"
+#include "global/FileSuffixConstants.h"
 #include "index/Index.h"
 #include "index/IndexFormatVersion.h"
 #include "index/IndexImpl.h"
+#include "index/Permutation.h"
 #include "index/vocabulary/VocabularyType.h"
+#include "util/FilesystemHelpers.h"
 #include "util/HashSet.h"
 #include "index/Permutation.h"
 #include "index/vocabulary/VocabularyType.h"
@@ -111,31 +118,6 @@ auto makeTestScanWidthTwo = [](const IndexImpl& index,
     ASSERT_EQ(wol, makeIdTableFromVector(expected));
   };
 };
-
-// Create a temporary directory inside the Google Test temporary directory
-// with the given `name`. The directory and all its contents are deleted when
-// the returned `absl::Cleanup` is destroyed.
-auto makeTemporaryDirectory(std::string_view name) {
-  std::string directory = ::testing::TempDir();
-  if (!ql::ends_with(directory, "/")) {
-    directory.push_back('/');
-  }
-  AD_CORRECTNESS_CHECK(!ql::starts_with(name, '/'));
-  directory += name;
-  // Create directory.
-  ql::filesystem::create_directory(directory);
-
-  // Remove all files in directory when done.
-  absl::Cleanup cleanup{[directory]() {
-    ql::error_code ec;
-    ql::filesystem::remove_all(directory, ec);
-    if (ec) {
-      AD_LOG(ERROR) << "Could not remove temporary directory " << directory
-                    << ": " << ec.message();
-    }
-  }};
-  return std::make_pair(std::move(directory), std::move(cleanup));
-}
 }  // namespace
 
 TEST(IndexTest, createFromTurtleTest) {

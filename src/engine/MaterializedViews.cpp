@@ -25,6 +25,7 @@
 #include "engine/VariableToColumnMap.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "global/Constants.h"
+#include "global/FileSuffixConstants.h"
 #include "index/DeltaTriples.h"
 #include "index/ExternalSortFunctors.h"
 #include "libqlever/Qlever.h"
@@ -34,6 +35,7 @@
 #include "parser/TripleComponent.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/Exception.h"
+#include "util/FilesystemHelpers.h"
 #include "util/FilesystemHelpers.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ProgressBar.h"
@@ -552,11 +554,6 @@ bool MaterializedViewsManager::isViewLoaded(const std::string& name) const {
 }
 
 // _____________________________________________________________________________
-bool MaterializedViewsManager::hasLoadedViews() const {
-  return !loadedViews_.rlock()->views_.empty();
-}
-
-// _____________________________________________________________________________
 std::vector<ql::filesystem::path> MaterializedViewsManager::viewFilesOnDisk(
     const ql::filesystem::path& onDiskBase) {
   // View files are named `<base>.view.<name>...`. Reuse the canonical filename
@@ -721,6 +718,8 @@ void MaterializedView::throwIfInvalidName(std::string_view name) {
 // _____________________________________________________________________________
 void MaterializedViewsManager::setOnDiskBase(const std::string& onDiskBase) {
   AD_CORRECTNESS_CHECK(
+      loadedViews_.rlock()->views_.empty(),
+      "Changing the on disk basename is not allowed once views are loaded.");
       loadedViews_.rlock()->views_.empty(),
       "Changing the on disk basename is not allowed once views are loaded.");
   onDiskBase_ = onDiskBase;

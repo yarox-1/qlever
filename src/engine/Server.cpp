@@ -1725,126 +1725,19 @@ Awaitable<void> Server::rebuildIndex(const std::string& indexBaseName) {
   //
   // We don't directly `co_await` because of lifetime issues (bugs) in the
   // Conan setup.
-  auto coroutine = ad_utility::runFunctionOnExecutor(
-      queryThreadPool_.get_executor(),
-      [this, &index, &handle, &config] {
-        return qlever().rebuildIndexToDisk(index, config, handle);
+  auto coroutine = computeInNewThread(
+      queryThreadPool_,
+      [&index, &handle, &indexBaseName] {
+        auto logFileName = indexBaseName + REBUILD_INDEX_LOG_SUFFIX;
+        auto [currentSnapshot, localVocabCopy, ownedBlocks] =
+            index.deltaTriplesManager()
+                .getCurrentLocatedTriplesSharedStateWithVocab();
+        qlever::materializeToIndex(index.getImpl(), indexBaseName,
+                                   currentSnapshot, localVocabCopy, ownedBlocks,
+                                   handle, logFileName);
       },
-      net::use_awaitable);
-  auto rebuildResult = co_await std::move(coroutine);
-  // It is important that the swap is done in the update thread pool, because it
-  // prevents other updates from being applied while the diff is computed for
-  // the new index. Otherwise, the new index would be out of sync with the
-  // current index.
-  auto swapRoutine = ad_utility::runFunctionOnExecutor(
-      updateThreadPool_.get_executor(),
-      [this, &index, &oldManager, rebuildResult = std::move(rebuildResult),
-       &handle, &config]() mutable {
-        // The swap below moves all files of the old index to a different base
-        // name and installs the new index at the base name of the old one. Any
-        // view file that `oldManager` created after that point would silently
-        // become a view of the NEW index, even though its `Id`s refer to the
-        // vocabulary of the old one. `oldManager` outlives the swap (queries
-        // that started before it still hold a snapshot of it), so close it for
-        // writing first. This blocks until a concurrent
-        // `write-materialized-view` or `delete-materialized-view` has finished;
-        // the files it created are then moved along with the rest of the old
-        // index.
-        //
-        // NOTE: The other on-disk state of the old index (its persisted delta
-        // triples and allocated graph names) needs no such protection, because
-        // it is only written from this very executor, which has a single
-        // thread.
-        oldManager.retireOnDiskFiles();
-        // The swap also applies the configured policy for which `previous.*`
-        // index directories to keep. Deleting a directory there blocks this
-        // single-threaded executor for a bit, but the swap blocks updates
-        // anyway, and doing it in the same step avoids an extra executor
-        // hop. A cleanup failure is only logged; it does not fail the
-        // request, because the new index is already in place.
-        qlever().swapInRebuiltIndex(index, std::move(rebuildResult), handle,
-                                    config, keepPreviousIndexDirs_);
-        auto now = std::chrono::duration_cast<std::chrono::seconds>(
-                       std::chrono::system_clock::now().time_since_epoch())
-                       .count();
-        metrics_->indexLoadMetric_->Record(now);
-      },
-      net::use_awaitable);
-  co_await std::move(swapRoutine);
-  co_return config;
-}
-
-// _____________________________________________________________________________
-Awaitable<std::optional<qlever::IndexRebuildConfig>>
-Server::rebuildIndexUnlessInProgress(
-    std::optional<std::string> rebuildTmpDir,
-    std::optional<std::string> rebuildPreviousIndexDir) {
-  if (rebuildInProgress_.exchange(true)) {
-    co_return std::nullopt;
-  }
-  absl::Cleanup cleanup{[this]() { rebuildInProgress_.store(false); }};
-  co_return co_await rebuildIndex(std::move(rebuildTmpDir),
-                                  std::move(rebuildPreviousIndexDir));
-}
-
-// _____________________________________________________________________________
-void Server::triggerRebuildIfStrategySaysSo(const DeltaTriplesCount& count,
-                                            size_t numIndexTriples) {
-  if (!rebuildIndexStrategy_.has_value()) {
-    return;
-  }
-  // NOTE: Cast before adding: the counts are non-negative here (they are set
-  // sizes), and the unsigned addition cannot overflow.
-  auto numDeltaTriples = static_cast<size_t>(count.triplesInserted_) +
-                         static_cast<size_t>(count.triplesDeleted_);
-  if (!rebuildIndexStrategy_->shouldTriggerRebuild(numDeltaTriples,
-                                                   numIndexTriples)) {
-    return;
-  }
-  // Cheap early return while a rebuild is running, so that the updates that
-  // arrive during it (whose delta triples are carried over into the new index
-  // by the swap) do not each spawn a coroutine only to find the guard taken.
-  // The authoritative check is the guard in `rebuildIndexUnlessInProgress`,
-  // which is shared with the `cmd=rebuild-index` HTTP request, so that a
-  // manual and an automatic rebuild can never run concurrently.
-  if (rebuildInProgress_.load()) {
-    return;
-  }
-  AD_LOG_INFO << "Triggering an automatic index rebuild, the number of delta "
-                 "triples ("
-              << numDeltaTriples << ") has reached the threshold ("
-              << rebuildIndexStrategy_->rebuildThreshold(numIndexTriples)
-              << ") for the current index size (" << numIndexTriples
-              << " triples)" << std::endl;
-  net::co_spawn(queryThreadPool_, runAutomaticRebuild(),
-                &Server::logAutomaticRebuildFailure);
-}
-
-// _____________________________________________________________________________
-Awaitable<void> Server::runAutomaticRebuild() {
-  auto config =
-      co_await rebuildIndexUnlessInProgress(std::nullopt, std::nullopt);
-  if (config.has_value()) {
-    AD_LOG_INFO << "Automatic index rebuild completed, the new index "
-                   "has been swapped in"
-                << std::endl;
-  } else {
-    AD_LOG_INFO << "Automatic index rebuild skipped, another rebuild "
-                   "started concurrently"
-                << std::endl;
-  }
-}
-
-// _____________________________________________________________________________
-void Server::logAutomaticRebuildFailure(std::exception_ptr exception) {
-  if (!exception) {
-    return;
-  }
-  try {
-    std::rethrow_exception(exception);
-  } catch (const std::exception& e) {
-    AD_LOG_ERROR << "Automatic index rebuild failed: " << e.what() << std::endl;
-  }
+      handle);
+  co_await std::move(coroutine);
 }
 
 // For helper function `Server::onlyForTestingProcess`

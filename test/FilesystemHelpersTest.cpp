@@ -184,6 +184,72 @@ TEST(IsSubdirectoryOf, differentPaths) {
 }
 
 // _____________________________________________________________________________
+TEST(FilesWithBaseNameAndSuffix, returnsOnlyFilesWithBaseNameAndSuffix) {
+  TempDir tmp;
+  auto base = tmp.path() / "index";
+  // Files that match `<base>.vocabulary*`.
+  touch(tmp.path() / "index.vocabulary");
+  touch(tmp.path() / "index.vocabulary.words");
+  touch(tmp.path() / "index.vocabulary.ids");
+  // Files that must NOT match: wrong suffix, wrong base name, a prefix of the
+  // base name, and a file whose name is only a prefix of `<base>.vocabulary`.
+  touch(tmp.path() / "index.meta");
+  touch(tmp.path() / "other.vocabulary");
+  touch(tmp.path() / "index");
+  touch(tmp.path() / "index.vocab");
+
+  auto result = filesWithBaseNameAndSuffix(base, ".vocabulary");
+  std::vector expected{tmp.path() / "index.vocabulary",
+                       tmp.path() / "index.vocabulary.words",
+                       tmp.path() / "index.vocabulary.ids"};
+  EXPECT_THAT(result, ::testing::UnorderedElementsAreArray(expected));
+}
+
+// _____________________________________________________________________________
+TEST(FilesWithBaseNameAndSuffix, baseNameWithoutDirectoryUsesCwd) {
+  TempDir tmp;
+  auto oldCwd = fs::current_path();
+  fs::current_path(tmp.path());
+  // Restore the working directory before `tmp` is removed (cleanups run in
+  // reverse order of declaration).
+  absl::Cleanup restoreCwd{[&oldCwd] { fs::current_path(oldCwd); }};
+
+  touch("index.vocabulary");
+  touch("index.vocabulary.words");
+  touch("other.vocabulary");  // must NOT match (different base name)
+
+  // A base name without a directory component, so `parent_path()` is empty.
+  // The returned paths must be bare file names (same form as the base name),
+  // so that they textually start with the base name.
+  auto result = filesWithBaseNameAndSuffix("index", ".vocabulary");
+  EXPECT_THAT(result, ::testing::UnorderedElementsAre(
+                          fs::path{"index.vocabulary"},
+                          fs::path{"index.vocabulary.words"}));
+}
+
+// _____________________________________________________________________________
+TEST(FilesWithBaseNameAndSuffix, ignoresSubdirectories) {
+  TempDir tmp;
+  auto base = tmp.path() / "index";
+  touch(tmp.path() / "index.view.a");
+  // A subdirectory that matches the prefix must be ignored (only regular files
+  // are returned).
+  fs::create_directory(tmp.path() / "index.view.dir");
+
+  auto result = filesWithBaseNameAndSuffix(base, ".view.");
+  EXPECT_THAT(result,
+              ::testing::UnorderedElementsAre(tmp.path() / "index.view.a"));
+}
+
+// _____________________________________________________________________________
+TEST(FilesWithBaseNameAndSuffix, noMatchReturnsEmpty) {
+  TempDir tmp;
+  touch(tmp.path() / "index.meta");
+  auto result = filesWithBaseNameAndSuffix(tmp.path() / "index", ".vocabulary");
+  EXPECT_THAT(result, ::testing::IsEmpty());
+}
+
+// _____________________________________________________________________________
 TEST(DeleteFilesInDirectory, deletesOnlyMatchingRegularFiles) {
   TempDir tmp;
   touch(tmp.path() / "del_1.txt");

@@ -26,6 +26,7 @@
 #include "backports/algorithm.h"
 #include "backports/filesystem.h"
 #include "engine/AddCombinedRowToTable.h"
+#include "global/FileSuffixConstants.h"
 #include "global/RuntimeParameters.h"
 #include "index/Index.h"
 #include "index/IndexFormatVersion.h"

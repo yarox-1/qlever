@@ -25,11 +25,11 @@
 #include "backports/filesystem.h"
 #include "engine/Server.h"
 #include "global/Constants.h"
+#include "global/FileSuffixConstants.h"
 #include "index/IndexRebuilder.h"
 #include "index/IndexRebuilderImpl.h"
 #include "index/TripleComponentConversions.h"
 #include "index/vocabulary/VocabularyType.h"
-#include "libqlever/Qlever.h"
 #include "util/FilesystemHelpers.h"
 
 using namespace qlever::indexRebuilder;

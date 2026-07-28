@@ -17,6 +17,8 @@
 
 #include <cstddef>
 #include <string>
+#include <string_view>
+#include <vector>
 
 #include "backports/filesystem.h"
 
