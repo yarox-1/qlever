@@ -382,8 +382,6 @@ class Qlever {
   // before it can answer queries.
   explicit Qlever(const EngineConfig& config, bool skipLoading = false);
 
-  using PlannedQuery = qlever::PlannedQuery;
-
   // Run the query planner on `parsedQuery`. Despite the name, `ParsedQuery`
   // is also used to represent SPARQL update operations (see
   // ParsedQuery::hasUpdateClause()); this function handles both cases
@@ -408,8 +406,63 @@ class Qlever {
                          boost::optional<const ad_utility::Timer&>
                              requestTimer = boost::none) const;
 
+  // Plan a query that was parsed by `parseQuery` (or bundled by
+  // `bindParsedQuery`, both see below). The query is planned against the
+  // `QueryExecutionContext` that `parsedQuery` carries, so the two can not get
+  // out of sync. Implemented in terms of the `planQuery` overload above.
+  //
+  // For the semantics of `handle`, `timeLimit`, and `requestTimer`, see
+  // `planQuery` above.
+  PlannedQuery planQuery(
+      ParsedQueryAndContext parsedQuery,
+      SharedCancellationHandle handle =
+          std::make_shared<ad_utility::CancellationHandle<>>(),
+      std::optional<TimeLimit> timeLimit = std::nullopt,
+      boost::optional<const ad_utility::Timer&> requestTimer =
+          boost::none) const;
+
+  // Parse the given `query` (despite the name, `query` may also be a SPARQL
+  // update operation) and return it together with the
+  // `QueryExecutionContext` to plan and execute it against, see
+  // `ParsedQueryAndContext`.
+  //
+  // This is the first half of `parseAndPlanQuery`, the second half being the
+  // `planQuery` overload above. Calling the two separately is useful to inspect
+  // or modify the `ParsedQuery` before it is planned, to measure the time for
+  // the parsing and the planning separately, and to reuse a parsed query (see
+  // below).
+  //
+  // NOTE ON REUSING A PARSED QUERY: The `ParsedQuery` depends on the
+  // `QueryExecutionContext` it was parsed with, but only through that context's
+  // `EncodedIriManager` (which determines which IRIs are encoded directly in
+  // the ID). It is therefore valid, and saves the repeated parsing of the same
+  // query, to take the `ParsedQuery` out of the result and plan it against a
+  // *different* context, as long as that context has an equivalent
+  // `EncodedIriManager` (see `bindParsedQuery`). This is in particular the case
+  // for several `Qlever` instances whose indexes were built with the same
+  // `IndexBuilderConfig::prefixesForIdEncodedIris_`. If the
+  // `EncodedIriManager`s differ, the affected IRIs are silently misinterpreted,
+  // so this has to be ensured by the caller.
+  ParsedQueryAndContext parseQuery(
+      std::string query, const std::vector<DatasetClause>& datasetClauses = {},
+      std::function<void(std::string)> updateCallback = ad_utility::noop,
+      bool pinSubtrees = false, bool pinResult = false) const;
+
+  // Bundle an already-parsed query with a fresh `QueryExecutionContext` of this
+  // instance, so that it can be planned here. Together with `parseQuery` this
+  // makes it possible to parse a query once and plan it on several instances.
+  //
+  // PRECONDITION: `parsedQuery` must have been parsed with a context whose
+  // `EncodedIriManager` is equivalent to this instance's; see the note on
+  // reusing a parsed query in `parseQuery` above. This is not checked.
+  ParsedQueryAndContext bindParsedQuery(
+      ParsedQuery parsedQuery,
+      std::function<void(std::string)> updateCallback = ad_utility::noop,
+      bool pinSubtrees = false, bool pinResult = false) const;
+
   // Parse and plan the given `query` (see `planQuery` above; despite the
-  // name, `query` may also be a SPARQL update operation).
+  // name, `query` may also be a SPARQL update operation). This is exactly
+  // `parseQuery` followed by `planQuery`.
   //
   // NOTES: This is useful as a separate function for the following reasons.
   //
@@ -437,8 +490,7 @@ class Qlever {
           std::make_shared<ad_utility::CancellationHandle<>>(),
       std::optional<TimeLimit> timeLimit = std::nullopt,
       boost::optional<const ad_utility::Timer&> requestTimer = boost::none,
-      std::function<void(std::string)> updateCallback =
-          [](std::string) { /* the default is a noop*/ },
+      std::function<void(std::string)> updateCallback = ad_utility::noop,
       bool pinSubtrees = false, bool pinResult = false) const;
 
   // Run the given parsed and planned query. The result is returned as a
@@ -541,6 +593,9 @@ class Qlever {
     // dedicated move operations.
     blobManager_.deserialize(*this, blob, allocator);
   }
+
+  // Clear the query result cache.
+  void clearCache() { cache_.clearAll(); }
 
   // Create a Query Execution Context needed for execution of single SPARQL
   // query. Use an explicitly snapshotted `IndexAndViews` to make sure we have a
