@@ -9,7 +9,10 @@
 
 #include <sstream>
 
+#include "index/ExportIds.h"
+#include "index/IndexImpl.h"
 #include "rdfTypes/GeoPoint.h"
+#include "rdfTypes/GeoSparqlHelpers.h"
 
 // ____________________________________________________________________________
 std::ostream& operator<<(std::ostream& stream, const TripleComponent& obj) {
