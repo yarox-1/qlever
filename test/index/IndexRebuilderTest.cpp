@@ -13,7 +13,12 @@
 #include <boost/asio/detached.hpp>
 #include <boost/asio/thread_pool.hpp>
 #include <boost/asio/use_future.hpp>
+#include <future>
+#include <optional>
+#include <string>
+#include <string_view>
 
+#include "../util/AsioTestHelpers.h"
 #include "../util/GTestHelpers.h"
 #include "../util/HttpRequestHelpers.h"
 #include "../util/IdTableHelpers.h"
@@ -31,6 +36,7 @@
 #include "index/TripleComponentConversions.h"
 #include "index/vocabulary/VocabularyType.h"
 #include "util/FilesystemHelpers.h"
+#include "util/SourceLocation.h"
 
 using namespace qlever::indexRebuilder;
 using namespace std::string_literals;
@@ -801,10 +807,6 @@ TEST(IndexRebuilder, serverIntegration) {
 
   qlever::EngineConfig config;
   config.baseName_ = indexName;
-  // Keep all previous index directories; the checks below expect one
-  // directory per rebuild. The cleanup policy itself is tested by
-  // `serverIntegrationKeepPreviousIndexDirs` below.
-  config.keepPreviousIndexDirs_ = qlever::KeepPreviousIndexDirs::All;
   constexpr std::string_view accessToken = "accessToken";
   Server server{4321, 1, std::string{accessToken}, config};
 
@@ -848,14 +850,14 @@ TEST(IndexRebuilder, serverIntegration) {
   };
 
   // Without access token this operation is not allowed!
-  auto request0 = makeRebuildRequest("", false);
+  auto request0 = makeRebuildRequest("&index-name=my-name", false);
   expectRequestFailsWith(request0, ::testing::HasSubstr("access token"));
 
-  // Two rebuilds with default parameters at the same time: the first
-  // succeeds, the second is rejected because a rebuild is in progress.
-  auto request1 = makeRebuildRequest();
+  // The same request twice, the second one has to be rejected because a
+  // rebuild is already running.
+  auto request1 = makeRebuildRequest("&index-name=my-name");
   auto future1 = performRequest(request1);
-  auto request2 = makeRebuildRequest();
+  auto request2 = makeRebuildRequest("&index-name=my-name");
   auto future2 = performRequest(request2);
 
   auto response1 = future1.get();
@@ -869,8 +871,7 @@ TEST(IndexRebuilder, serverIntegration) {
   // successfully.
   EXPECT_TRUE(ql::filesystem::exists("my-name.meta-data.json"));
 
-  auto request3 = ad_utility::testing::makeGetRequest(
-      "/?cmd=rebuild-index&access-token=accessToken");
+  auto request3 = makeRebuildRequest();
   auto response3 = performRequest(request3).get();
   EXPECT_EQ(response3.base().result(), boost::beast::http::status::ok);
   // By default QLever should assign a default name for the new index.
@@ -878,24 +879,18 @@ TEST(IndexRebuilder, serverIntegration) {
 
   // The index with the same name already exists, so we don't want to overwrite
   // it.
-  auto request4 = ad_utility::testing::makeGetRequest(
-      "/?cmd=rebuild-index&access-token=accessToken");
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      performRequest(request4).get(),
-      ::testing::HasSubstr("already files with the same base name"));
+  auto request4 = makeRebuildRequest();
+  expectRequestFailsWith(
+      request4, ::testing::HasSubstr("already files with the same base name"));
 
   // The index has to reside within the same directory as the original index.
-  auto request5 = ad_utility::testing::makeGetRequest(
-      "/?cmd=rebuild-index&access-token=accessToken&index-name=%2Fmy-name");
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      performRequest(request5).get(),
-      ::testing::HasSubstr("not located in the same directory"));
+  auto request5 = makeRebuildRequest("&index-name=%2Fmy-name");
+  expectRequestFailsWith(
+      request5, ::testing::HasSubstr("not located in the same directory"));
 
-  auto request6 = ad_utility::testing::makeGetRequest(
-      "/?cmd=rebuild-index&access-token=accessToken&index-name=..%2Fother");
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      performRequest(request6).get(),
-      ::testing::HasSubstr("not located in the same directory"));
+  auto request6 = makeRebuildRequest("&index-name=..%2Fother");
+  expectRequestFailsWith(
+      request6, ::testing::HasSubstr("not located in the same directory"));
 
   threadPool.join();
 }
