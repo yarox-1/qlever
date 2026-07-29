@@ -2,21 +2,17 @@
 add_subdirectory(sparqlParser)
 add_subdirectory(data)
 
-# These files are needed by `index`, but the `sparqlParser` library below itself
+# These files are needed by `index`, but the `parser` library below itself
 # depends on `index`, so the dependency chain is
-# `sparqlParser` -> `index` -> `basicParser`. They therefore have to live in
-# their own library instead of in `sparqlParser`.
-add_library(basicParser Tokenizer.cpp LiteralOrIri.cpp WordsAndDocsFileParser.cpp AsyncBlockSource.cpp
-        TripleComponent.cpp PropertyPath.cpp PayloadVariables.cpp)
+# `parser` -> `index` -> `basicParser`. They therefore have to live in their own
+# library instead of in `parser`.
+add_library(basicParser Tokenizer.cpp LiteralOrIri.cpp WordsAndDocsFileParser.cpp AsyncBlockSource.cpp)
 qlever_target_link_libraries(basicParser qlever_util rdfTypes parserData)
 
-# The parser for the RDF input formats. It is used by `index` (which builds an
-# index from RDF input files), so it must not depend on `index` itself. It needs
-# the `vocabulary` library for the `EncodedIriManager`.
-add_library(rdfParser RdfParser.cpp AsyncFileBlockDriver.cpp)
-qlever_target_link_libraries(rdfParser basicParser vocabulary localVocab)
-
-add_library(sparqlParser
+# TODO: Consider moving files that don't depend on the engine (sparqlExpressions,
+# index) into basicParser or a new intermediate library to clean up the
+# dependency graph.
+add_library(parser
         sparqlParser/SparqlQleverVisitor.cpp
         SparqlParser.cpp
         ParsedQuery.cpp
@@ -40,4 +36,4 @@ add_library(sparqlParser
         ExternalValuesQuery.cpp
         VariableCounter.cpp
 )
-qlever_target_link_libraries(parser sparqlParser parserData sparqlExpressions rdfEscaping global re2::re2 qlever_util engine index rdfTypes)
+qlever_target_link_libraries(parser basicParser sparqlParser parserData sparqlExpressions rdfEscaping global qlever_util index rdfTypes)

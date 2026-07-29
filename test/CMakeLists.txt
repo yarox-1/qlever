@@ -22,10 +22,18 @@ endfunction()
 # Then register the test cases from the executable with `ctest` (see
 # `QLEVER_ONE_TEST_CASE_PER_FILE` in the top-level `CMakeLists.txt` for the two
 # possible regimes).
+# Then register the test cases from the executable with `ctest` (see
+# `QLEVER_ONE_TEST_CASE_PER_FILE` in the top-level `CMakeLists.txt` for the two
+# possible regimes).
 # Typically you should use `addAndLinkTest` (below) but this function can be used,
 # if a test binary requires multiple sources
 function(linkAndDiscoverTest basename)
     linkTest(${basename} ${ARGN})
+    if (QLEVER_ONE_TEST_CASE_PER_FILE)
+        add_test(NAME ${basename} COMMAND ${basename})
+    else ()
+        gtest_discover_tests(${basename} ${basename} DISCOVERY_TIMEOUT 600 PROPERTIES LABELS "${basename}")
+    endif ()
     if (QLEVER_ONE_TEST_CASE_PER_FILE)
         add_test(NAME ${basename} COMMAND ${basename})
     else ()
@@ -41,6 +49,13 @@ endfunction()
 # issues should be fixed via per-test unique filenames instead.
 function(linkAndDiscoverTestSerial basename)
     linkTest(${basename} ${ARGN})
+    if (QLEVER_ONE_TEST_CASE_PER_FILE)
+        add_test(NAME ${basename} COMMAND ${basename})
+        set_tests_properties(${basename} PROPERTIES RUN_SERIAL TRUE)
+    else ()
+        gtest_discover_tests(${basename} ${basename} DISCOVERY_TIMEOUT 600 PROPERTIES RUN_SERIAL
+                TRUE LABELS "${basename}")
+    endif ()
     if (QLEVER_ONE_TEST_CASE_PER_FILE)
         add_test(NAME ${basename} COMMAND ${basename})
         set_tests_properties(${basename} PROPERTIES RUN_SERIAL TRUE)
@@ -233,12 +248,13 @@ addLinkAndDiscoverTest(UnionTest engine)
 
 if (SINGLE_TEST_BINARY)
     target_sources(QLeverAllUnitTestsMain PUBLIC TokenTest.cpp TokenTestCtreHelper.cpp)
-    qlever_target_link_libraries(QLeverAllUnitTestsMain parser re2 qlever_util)
+    qlever_target_link_libraries(QLeverAllUnitTestsMain parser qlever_util)
 else ()
     add_executable(TokenTest TokenTest.cpp TokenTestCtreHelper.cpp)
-    linkAndDiscoverTest(TokenTest parser re2 qlever_util)
+    linkAndDiscoverTest(TokenTest parser qlever_util)
 endif ()
 
+addLinkAndDiscoverTestNoLibs(RdfParserTest index)
 addLinkAndDiscoverTestNoLibs(RdfParserTest index)
 
 addLinkAndDiscoverTest(MultiColumnJoinTest engine)
@@ -258,9 +274,9 @@ addLinkAndDiscoverTest(UriParserUriTest)
 
 addLinkAndDiscoverTest(ParsedUriTest)
 
-addLinkAndDiscoverTestNoLibs(StringSortComparatorTest)
+addLinkAndDiscoverTestNoLibs(StringSortComparatorTest qlever_util)
 
-addLinkAndDiscoverTestNoLibs(LocaleManagerTest)
+addLinkAndDiscoverTestNoLibs(LocaleManagerTest stringUtils)
 
 addLinkAndDiscoverTestNoLibs(GenericCharTraitsTest)
 
@@ -279,11 +295,12 @@ addLinkAndDiscoverTest(MinusTest engine)
 # this test runs for quite some time and might have spurious failures!
 # Therefore it is compiled, but not run. If you want to run it,
 # change the following two lines.
-addAndLinkTest(SortPerformanceEstimatorTest sortPerformanceEstimator sparqlParser)
+addAndLinkTest(SortPerformanceEstimatorTest sortPerformanceEstimator parser)
 #addLinkAndDiscoverTest(SortPerformanceEstimatorTest sortPerformanceEstimator)
 
 addLinkAndDiscoverTestNoLibs(SerializerTest)
 
+addLinkAndDiscoverTestNoLibs(ParametersTest qlever_util)
 addLinkAndDiscoverTestNoLibs(ParametersTest qlever_util)
 
 addLinkAndDiscoverTestNoLibs(ConstructDeduplicationModeTest)
@@ -338,8 +355,6 @@ addLinkAndDiscoverTestNoLibs(GeoPointTest rdfTypes)
 
 addLinkAndDiscoverTest(GeoSparqlHelpersTest rdfTypes)
 
-addLinkAndDiscoverTest(GeoSparqlHelpersTest rdfTypes)
-
 addLinkAndDiscoverTest(GeoConvertersTest qlever_util)
 
 addLinkAndDiscoverTest(HttpUtilsTest qlever_util http)
@@ -350,6 +365,7 @@ addLinkAndDiscoverTest(DateYearDurationTest qlever_util parser)
 addLinkAndDiscoverTest(DurationTest qlever_util)
 addLinkAndDiscoverTest(DurationTest qlever_util)
 
+addLinkAndDiscoverTest(TripleComponentTest)
 addLinkAndDiscoverTest(TripleComponentTest)
 
 addLinkAndDiscoverTest(ValueIdTest qlever_util)

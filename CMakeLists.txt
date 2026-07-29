@@ -447,11 +447,15 @@ function(qlever_target_link_libraries target)
     else()
         set(QLEVER_BOOST_FILESYSTEM_LIB "")
     endif()
-    target_link_libraries(${target} ${ARGN} absl::compare absl::flat_hash_map
-            absl::flat_hash_set absl::strings absl::str_format
-            OpenSSL::SSL OpenSSL::Crypto GTest::gtest GTest::gmock fsst nlohmann_json::nlohmann_json Boost::container ${QLEVER_BOOST_FILESYSTEM_LIB} uriparser)
+    target_link_libraries(${target} PUBLIC ${ARGN}
+            absl::base absl::compare absl::flat_hash_map absl::flat_hash_set
+            absl::strings absl::str_format absl::status absl::statusor absl::time
+            absl::hash absl::synchronization
+            re2 OpenSSL::SSL OpenSSL::Crypto GTest::gtest GTest::gmock
+            fsst nlohmann_json::nlohmann_json Boost::container
+            ${QLEVER_BOOST_FILESYSTEM_LIB} uriparser)
     if (NOT QLEVER_NO_UNICODE)
-      target_link_libraries(${target} ICU::uc ICU::i18n)
+        target_link_libraries(${target} PUBLIC ICU::uc ICU::i18n)
     endif()
 
     # memorySize is a utility library for defining memory sizes.
@@ -695,7 +699,19 @@ FetchContent_Declare(
 if (EMSCRIPTEN)
     add_compile_definitions(GTEST_HAS_PTHREAD=1)
 endif ()
-FetchContent_MakeAvailable(googletest ctre abseil re2 fsst s2 nlohmann-json antlr range-v3 spatialjoin uriparser opentelemetry-cpp)
+FetchContent_MakeAvailable(googletest ctre abseil fsst nlohmann-json antlr range-v3 spatialjoin uriparser opentelemetry-cpp s2 re2)
+
+# Depending on `BUILD_SHARED_LIBS`, the `antlr4` build creates either a shared or
+# a static library target. Define the alias `antlr4_umbrella` such that the rest
+# of the build can link against the correct one without further case
+# distinctions.
+if (BUILD_SHARED_LIBS)
+    target_compile_options(antlr4_shared PRIVATE -fPIC -Wno-all -Wno-extra -Wno-error -Wno-deprecated-declarations)
+    add_library(antlr4_umbrella ALIAS antlr4_shared)
+else ()
+    target_compile_options(antlr4_static PRIVATE -Wno-all -Wno-extra -Wno-error -Wno-deprecated-declarations)
+    add_library(antlr4_umbrella ALIAS antlr4_static)
+endif ()
 # Disable some warnings in RE2 and GTEST
 target_compile_options(s2 PRIVATE -Wno-sign-compare -Wno-unused-parameter -Wno-class-memaccess -Wno-comment -Wno-redundant-move -Wno-unknown-warning-option -Wno-maybe-uninitialized -Wno-class-memaccess -Wno-unused-but-set-variable -Wno-unused-function -Wno-nullability-completeness)
 target_compile_options(re2 PRIVATE -Wno-unused-parameter -Wno-deprecated-declarations)
@@ -861,7 +877,7 @@ if (NOT _EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER)
 endif()
 
 add_executable(LibQLeverExample src/libqlever/LibQLeverExample.cpp)
-qlever_target_link_libraries(LibQLeverExample parser engine qlever_util index qlever absl::strings)
+qlever_target_link_libraries(LibQLeverExample parser engine qlever_util index qlever)
 
 add_executable(VocabularyMergerMain src/VocabularyMergerMain.cpp)
 qlever_target_link_libraries(VocabularyMergerMain index sparqlParser ${CMAKE_THREAD_LIBS_INIT})
