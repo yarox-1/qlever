@@ -508,6 +508,13 @@ void MaterializedViewsManager::deleteView(const std::string& name) const {
   MaterializedView::throwIfInvalidName(name);
   auto filenameBase = MaterializedView::getFilenameBase(onDiskBase_, name);
 
+  // Hold this lock for the whole sequence below, so that we can not delete
+  // files that an index rebuild has already replaced by the files of the
+  // rebuilt index (see `retireOnDiskFiles`). NOTE: It has to be acquired before
+  // `loadedViews_` below.
+  auto notRetiredLock = lockIfNotRetired(
+      absl::StrCat("delete the materialized view '", name, "'"));
+
   // Hold the lock for the whole check-unload-delete sequence below, so that a
   // concurrent `loadView`/`getView` call for the same view can not reload it
   // in between, and so that of two concurrent `deleteView` calls for the same
@@ -551,6 +558,11 @@ std::shared_ptr<const MaterializedView> MaterializedViewsManager::getView(
 // _____________________________________________________________________________
 bool MaterializedViewsManager::isViewLoaded(const std::string& name) const {
   return loadedViews_.rlock()->views_.contains(name);
+}
+
+// _____________________________________________________________________________
+bool MaterializedViewsManager::hasLoadedViews() const {
+  return !loadedViews_.rlock()->views_.empty();
 }
 
 // _____________________________________________________________________________

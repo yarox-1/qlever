@@ -14,6 +14,7 @@
 #include <gtest/gtest_prod.h>
 
 #include <array>
+#include <stdexcept>
 
 #include "backports/filesystem.h"
 #include "engine/MaterializedViewsQueryAnalysis.h"
@@ -394,6 +395,9 @@ class MaterializedViewsManager {
 
   // Check if a materialized view is currently loaded.
   bool isViewLoaded(const std::string& name) const;
+
+  // Check if any materialized view is currently loaded.
+  bool hasLoadedViews() const;
 
   // Return the names of all view files (of all views, loaded or not) that exist
   // on disk for the given index base name. Views are loaded lazily by name, so

@@ -10,6 +10,8 @@
 #ifndef QLEVER_SRC_ENGINE_SERVER_H
 #define QLEVER_SRC_ENGINE_SERVER_H
 
+#include <absl/functional/any_invocable.h>
+
 #include <optional>
 #include <string>
 #include <vector>
@@ -63,12 +65,20 @@ class Server {
   using MakeQueryExecutionContext =
       absl::AnyInvocable<std::shared_ptr<QueryExecutionContext>(
           SharedIndexAndView)>;
+  // Build a `QueryExecutionContext` for a given `IndexAndViews` snapshot,
+  // capturing the request-specific settings (message sender, pinning). This
+  // lets the caller bind the context to whichever snapshot is current when the
+  // operation actually runs (see `processUpdate`).
+  using MakeQueryExecutionContext =
+      absl::AnyInvocable<std::shared_ptr<QueryExecutionContext>(
+          SharedIndexAndView)>;
   FRIEND_TEST(ServerTest, getQueryId);
   FRIEND_TEST(ServerTest, composeStatsJson);
   FRIEND_TEST(ServerTest, createMessageSender);
   FRIEND_TEST(ServerTest, adjustParsedQueryLimitOffset);
   FRIEND_TEST(ServerTest, configurePinnedResultWithName);
   FRIEND_TEST(IndexRebuilder, serverIntegration);
+  FRIEND_TEST(IndexRebuilder, serverIntegrationDroppedStateWarnings);
   friend serverTestHelpers::ServerForTesting;
 
  public:
@@ -215,8 +225,11 @@ class Server {
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<void> processUpdate(
           MakeQueryExecutionContext makeQec, std::vector<ParsedQuery>&& updates,
+          MakeQueryExecutionContext makeQec, std::vector<ParsedQuery>&& updates,
           const ad_utility::Timer& requestTimer, SharedTimeTracer tracer,
           ad_utility::SharedCancellationHandle cancellationHandle,
+          const RequestT& request, ResponseT&& send, TimeLimit timeLimit,
+          std::optional<PlannedQuery>& plannedUpdate);
           const RequestT& request, ResponseT&& send, TimeLimit timeLimit,
           std::optional<PlannedQuery>& plannedUpdate);
 
@@ -252,6 +265,7 @@ class Server {
       std::optional<double> geoIndexSimplificationInMeters);
   FRIEND_TEST(ServerTest, describePinResultWithNameForLog);
   //  Prepare the execution of an operation.
+  auto prepareOperation(std::string_view operationName,
   auto prepareOperation(std::string_view operationName,
                         std::string_view operationSPARQL,
                         ad_utility::websocket::MessageSender messageSender,
@@ -391,31 +405,6 @@ class Server {
   Awaitable<qlever::IndexRebuildConfig> rebuildIndex(
       std::optional<std::string> rebuildTmpDir,
       std::optional<std::string> rebuildPreviousIndexDir);
-
-  // Like `rebuildIndex` above, but do nothing and return `std::nullopt` if
-  // another rebuild is currently in progress (the `rebuildInProgress_` flag
-  // is held for the duration of the rebuild). This is the common
-  // implementation behind the two ways of triggering a rebuild: the manual
-  // `cmd=rebuild-index` HTTP request and the automatic trigger below.
-  Awaitable<std::optional<qlever::IndexRebuildConfig>>
-  rebuildIndexUnlessInProgress(
-      std::optional<std::string> rebuildTmpDir,
-      std::optional<std::string> rebuildPreviousIndexDir);
-
-  // If `rebuildIndexStrategy_` is set and it says a rebuild should be
-  // triggered for `count` (the number of delta triples after an update) and
-  // the given number of triples in the current index, trigger an index
-  // rebuild in the background, unless one is already in progress. Returns
-  // immediately; the rebuild runs detached and logs its success or failure.
-  void triggerRebuildIfStrategySaysSo(const DeltaTriplesCount& count,
-                                      size_t numIndexTriples);
-
-  // The background coroutine spawned by `triggerRebuildIfStrategySaysSo`:
-  // run the rebuild (unless one is already in progress) and log the outcome.
-  Awaitable<void> runAutomaticRebuild();
-
-  // Completion handler of that coroutine: log the exception, if there is one.
-  static void logAutomaticRebuildFailure(std::exception_ptr exception);
 
   // Getters for the `Qlever` instance, as well as its data members.
   qlever::Qlever& qlever() { return qlever_; }
