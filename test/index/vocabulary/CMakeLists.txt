@@ -1,6 +1,6 @@
 addLinkAndDiscoverTestNoLibs(VocabularyInMemoryTest vocabulary)
 
-addLinkAndDiscoverTestNoLibs(VocabularyOnDiskTest index parser)
+addLinkAndDiscoverTestNoLibs(VocabularyOnDiskTest vocabulary)
 
 addLinkAndDiscoverTest(CompressedVocabularyTest vocabulary)
 
