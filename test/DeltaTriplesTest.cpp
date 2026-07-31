@@ -1066,8 +1066,8 @@ TEST_F(DeltaTriplesTest, remapId) {
   qlever::indexRebuilder::IndexRebuildMapping idMapping;
   LocalVocab localVocab;
 
-  LocalVocabEntry sourceEntry =
-      LocalVocabEntry::fromStringRepresentation("<entry>", index);
+  LocalVocabEntry sourceEntry = LocalVocabEntry::fromStringRepresentation(
+      "<entry>", index.getLocalVocabContext());
   Id entryId = Id::makeFromLocalVocabIndex(&sourceEntry);
 
   auto remap = [&idMapping, &localVocab, &index](Id id) {
@@ -1316,7 +1316,7 @@ TEST_F(DeltaTriplesTest, addFromSnapshotDiffReanchorsLocalVocabEntries) {
   ASSERT_THAT(entries, ::testing::SizeIs(1));
   const LocalVocabEntry* carried = entries.at(0);
   ASSERT_NE(carried, nullptr);
-  EXPECT_EQ(&carried->getContextForTesting(), &newIndex.getImpl());
+  EXPECT_EQ(&carried->getContextForTesting(), &newIndex.getLocalVocabContext());
   EXPECT_EQ(carried->asLiteralOrIri().toStringRepresentation(), "\"zzz\"");
 
   // The carried entry must behave exactly like a fresh entry that was created
@@ -1324,7 +1324,8 @@ TEST_F(DeltaTriplesTest, addFromSnapshotDiffReanchorsLocalVocabEntries) {
   // would have kept the stale position cached against the old vocabulary),
   // and comparing must not access the old index (checked by the ASAN build,
   // since the old index no longer exists at this point).
-  LocalVocabEntry fresh{carried->asLiteralOrIri(), newIndex.getImpl()};
+  LocalVocabEntry fresh{carried->asLiteralOrIri(),
+                        newIndex.getImpl().getLocalVocabContext()};
   EXPECT_EQ(carried->positionInVocab(), fresh.positionInVocab());
   EXPECT_EQ(*carried, fresh);
 }

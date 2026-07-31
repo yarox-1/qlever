@@ -727,8 +727,9 @@ BlockMetadataRanges IsDatatypeExpression<IsDatatype::IRI>::evaluateImpl(
   // in order. The smallest possible IRI is represented by "<>", we use its
   // corresponding ValueId later on as a lower bound.
   auto vocabIriRanges =
-      make<GreaterThanExpression>(LVE::fromStringRepresentation("<>", context))
-          ->evaluateImpl(context, idRange, blockRange, isNegated_);
+      make<GreaterThanExpression>(
+          LVE::fromStringRepresentation("<>", index.getLocalVocabContext()))
+          ->evaluateImpl(index, idRange, blockRange, isNegated_);
   // (2) Encoded IRIs: These sort *after* all vocabulary IRIs, so the `> <>`
   // prefilter above does not cover them and we have to add their datatype range
   // explicitly. Otherwise, blocks that consist entirely of encoded IRIs would
@@ -745,8 +746,8 @@ BlockMetadataRanges IsDatatypeExpression<IsDatatype::IRI>::evaluateImpl(
 //______________________________________________________________________________
 template <>
 BlockMetadataRanges IsDatatypeExpression<IsDatatype::ENCODED_IRI>::evaluateImpl(
-    [[maybe_unused]] const LocalVocabContext& context,
-    const ValueIdSubrange& idRange, BlockMetadataSpan blockRange,
+    [[maybe_unused]] const IndexImpl& index, const ValueIdSubrange& idRange,
+    BlockMetadataSpan blockRange,
     [[maybe_unused]] bool getTotalComplement) const {
   // Encoded IRIs are exactly the `ValueId`s of datatype `EncodedVal`.
   std::array datatypes{Datatype::EncodedVal};

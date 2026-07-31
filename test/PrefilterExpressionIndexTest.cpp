@@ -1022,7 +1022,7 @@ TEST_F(PrefilterExpressionOnMetadataTest, isIriAndIsEncodedIriKeepEncodedIris) {
   // `isIri` must keep the regular vocabulary IRI block and the encoded IRI
   // block (before the fix, `blockEncodedIri` was incorrectly pruned), as well
   // as both mixed blocks.
-  EXPECT_EQ(toVec(isIri()->evaluate(lvc, blocks, 2)),
+  EXPECT_EQ(toVec(isIri()->evaluate(indexImpl, blocks, 2)),
             (std::vector<CompressedBlockMetadata>{
                 blockIntAndVocabIri, blockVocabIri, blockVocabAndEncodedIri,
                 blockEncodedIri}));
@@ -1040,7 +1040,7 @@ TEST_F(PrefilterExpressionOnMetadataTest, isIriAndIsEncodedIriKeepEncodedIris) {
   ASSERT_EQ(prefilterVec.size(), 1u);
   const auto& isEncodedIriPrefilter = prefilterVec.at(0).first;
   EXPECT_EQ(
-      toVec(isEncodedIriPrefilter->evaluate(lvc, blocks, 2)),
+      toVec(isEncodedIriPrefilter->evaluate(indexImpl, blocks, 2)),
       (std::vector<CompressedBlockMetadata>{
           blockIntAndVocabIri, blockVocabAndEncodedIri, blockEncodedIri}));
 
@@ -1053,7 +1053,7 @@ TEST_F(PrefilterExpressionOnMetadataTest, isIriAndIsEncodedIriKeepEncodedIris) {
   // excludes them too). It keeps the numeric block and, as always, the mixed
   // blocks. Note that `blockIntAndVocabIri` and `blockVocabAndEncodedIri` are
   // part of the result of both `isIri` and `!isIri`.
-  EXPECT_EQ(toVec(isIri(true)->evaluate(lvc, blocks, 2)),
+  EXPECT_EQ(toVec(isIri(true)->evaluate(indexImpl, blocks, 2)),
             (std::vector<CompressedBlockMetadata>{blockInt, blockIntAndVocabIri,
                                                   blockVocabAndEncodedIri}));
 
@@ -1061,7 +1061,7 @@ TEST_F(PrefilterExpressionOnMetadataTest, isIriAndIsEncodedIriKeepEncodedIris) {
   // everything else, in particular the pure vocabulary IRI block and the mixed
   // blocks. Note that `blockIntAndVocabIri` and `blockVocabAndEncodedIri` are
   // part of the result of both `isEncodedIri` and `!isEncodedIri`.
-  EXPECT_EQ(toVec(isEncodedIri(true)->evaluate(lvc, blocks, 2)),
+  EXPECT_EQ(toVec(isEncodedIri(true)->evaluate(indexImpl, blocks, 2)),
             (std::vector<CompressedBlockMetadata>{blockInt, blockIntAndVocabIri,
                                                   blockVocabIri,
                                                   blockVocabAndEncodedIri}));

@@ -144,7 +144,8 @@ TEST_F(NamedResultCacheSerializerTest, ValueSerializationZeroCopy) {
 
   NamedResultCache::Value deserializedValue;
   deserializedValue.allocatorForSerialization_ = alloc_;
-  deserializedValue.contextForSerialization_ = &qec_->getIndex().getImpl();
+  deserializedValue.contextForSerialization_ =
+      &qec_->getIndex().getLocalVocabContext();
   readSerializer >> deserializedValue;
 
   ASSERT_TRUE(
