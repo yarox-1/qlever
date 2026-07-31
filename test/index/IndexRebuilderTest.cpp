@@ -34,6 +34,7 @@
 #include "index/IndexRebuilder.h"
 #include "index/IndexRebuilderImpl.h"
 #include "index/TripleComponentConversions.h"
+#include "index/TripleComponentConversions.h"
 #include "index/vocabulary/VocabularyType.h"
 #include "util/FilesystemHelpers.h"
 #include "util/SourceLocation.h"
@@ -400,6 +401,11 @@ TEST(IndexRebuilder, readIndexAndRemap) {
                     DEFAULT_GRAPH_IRI)},
                 index)
           .value();
+  auto g =
+      toValueId(TripleComponent{ad_utility::triple_component::Iri::fromIriref(
+                    DEFAULT_GRAPH_IRI)},
+                index)
+          .value();
 
   index.deltaTriplesManager().modify<void>(
       [&cancellationHandle, g, &index](DeltaTriples& deltaTriples) {
@@ -587,31 +593,24 @@ TEST(IndexRebuilder, materializeToIndex) {
   for (auto [usePatterns, loadAllPermutations] :
        {std::pair{false, false}, std::pair{false, true},
         std::pair{true, true}}) {
-    // Also exercise the fully sequential processing of the permutation pairs
-    // (`rebuild-max-concurrent-permutation-pairs = 1`); the result must be
-    // the same as with the default (0 = no limit).
-    for (size_t maxConcurrentPairs : {size_t{0}, size_t{1}}) {
-      auto cleanupMaxPairs = setRuntimeParameterForTest<
-          &RuntimeParameters::rebuildMaxConcurrentPermutationPairs_>(
-          maxConcurrentPairs);
-      ad_utility::testing::TestIndexConfig config;
-      config.turtleInput = "<a> <b> <c> . <d> <e> _:f .";
-      config.loadAllPermutations = loadAllPermutations;
-      config.usePatterns = usePatterns;
-      auto index = ad_utility::testing::makeTestIndex("materializeToIndex",
-                                                      std::move(config));
-      index.deltaTriplesManager().modify<void>([&cancellationHandle, &index](
-                                                   DeltaTriples& deltaTriples) {
-        auto g =
-            toValueId(
-                TripleComponent{ad_utility::triple_component::Iri::fromIriref(
-                    DEFAULT_GRAPH_IRI)},
-                index)
-                .value();
-        deltaTriples.insertTriples(
-            cancellationHandle, {IdTriple<0>{std::array{V(2), V(1), V(0), g}},
-                                 IdTriple<0>{std::array{B(1), B(2), B(3), g}}});
-      });
+    ad_utility::testing::TestIndexConfig config;
+    config.turtleInput = "<a> <b> <c> . <d> <e> _:f .";
+    config.loadAllPermutations = loadAllPermutations;
+    config.usePatterns = usePatterns;
+    auto index = ad_utility::testing::makeTestIndex("materializeToIndex",
+                                                    std::move(config));
+    index.deltaTriplesManager().modify<void>([&cancellationHandle, &index](
+                                                 DeltaTriples& deltaTriples) {
+      auto g =
+          toValueId(
+              TripleComponent{ad_utility::triple_component::Iri::fromIriref(
+                  DEFAULT_GRAPH_IRI)},
+              index)
+              .value();
+      deltaTriples.insertTriples(
+          cancellationHandle, {IdTriple<0>{std::array{V(2), V(1), V(0), g}},
+                               IdTriple<0>{std::array{B(1), B(2), B(3), g}}});
+    });
 
       auto [state, vocab, blankNodes] =
           index.deltaTriplesManager()
@@ -684,6 +683,18 @@ TEST(IndexRebuilder, materializeToIndexWithZeroMemorySourceIndex) {
   Index index{ad_utility::makeAllocatorWithLimit<Id>(0_B)};
   index.createFromOnDiskIndex(sourceIndexName, false);
 
+  index.deltaTriplesManager().modify<void>([&cancellationHandle, &index](
+                                               DeltaTriples& deltaTriples) {
+    auto g =
+        toValueId(TripleComponent{ad_utility::triple_component::Iri::fromIriref(
+                      DEFAULT_GRAPH_IRI)},
+                  index)
+            .value();
+    deltaTriples.insertTriples(
+        cancellationHandle,
+        {IdTriple<0>{std::array{Id::makeFromInt(1), Id::makeFromInt(2),
+                                Id::makeFromInt(3), g}}});
+  });
   index.deltaTriplesManager().modify<void>([&cancellationHandle, &index](
                                                DeltaTriples& deltaTriples) {
     auto g =

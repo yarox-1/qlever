@@ -10,6 +10,7 @@
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
 #include "engine/QueryExecutionTree.h"
+#include "index/TripleComponentConversions.h"
 
 // _____________________________________________________________________________
 Describe::Describe(QueryExecutionContext* qec,

@@ -13,6 +13,7 @@
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 #include "engine/sparqlExpressions/StringExpressionsHelper.h"
 #include "engine/sparqlExpressions/VariadicExpression.h"
+#include "index/TripleComponentConversions.h"
 #include "index/vocabulary/EncodedIriManager.h"
 #include "parser/RdfParser.h"
 #include "util/ParsedUri.h"

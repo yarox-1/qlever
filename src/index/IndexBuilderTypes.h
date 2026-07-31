@@ -27,6 +27,7 @@
 #include "global/Constants.h"
 #include "global/Id.h"
 #include "index/ConstantsIndexBuilding.h"
+#include "index/TripleComponentConversions.h"
 #include "index/vocabulary/StringSortComparator.h"
 #include "parser/TripleComponent.h"
 #include "util/Conversions.h"
