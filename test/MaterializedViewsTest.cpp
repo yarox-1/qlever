@@ -20,6 +20,7 @@
 // server-integration test below is compiled out there.
 #ifndef __EMSCRIPTEN__
 #include "./ServerTestHelpers.h"
+#endif
 #include "./util/FileTestHelpers.h"
 #include "./util/HttpRequestHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
@@ -781,10 +782,6 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
 // under Emscripten anyway (threaded server integration).
 #ifndef __EMSCRIPTEN__
 TEST_F(MaterializedViewsTest, serverIntegration) {
-#ifdef __EMSCRIPTEN__
-  GTEST_SKIP() << "Skipped under Emscripten: this test hangs (threaded server "
-                  "integration).";
-#endif
   SKIP_IF_LOGLEVEL_IS_LOWER(INFO);
   using namespace serverTestHelpers;
   // Config for the plain `Server` instances constructed below.
@@ -983,6 +980,7 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
                              "token but no access token was provided"));
   }
 }
+#endif  // __EMSCRIPTEN__
 
 // _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, Deletion) {

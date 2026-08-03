@@ -28,7 +28,12 @@
 #include "../util/RuntimeParametersTestHelpers.h"
 #include "../util/TripleComponentTestHelpers.h"
 #include "backports/filesystem.h"
+// The `server` library is not built under Emscripten (`Server.cpp` crashes
+// emsdk 6.0.2's clang backend, see `src/engine/CMakeLists.txt`), so the
+// server-integration test below is compiled out there.
+#ifndef __EMSCRIPTEN__
 #include "engine/Server.h"
+#endif
 #include "global/Constants.h"
 #include "global/FileSuffixConstants.h"
 #include "index/IndexRebuilder.h"
@@ -774,54 +779,11 @@ void cleanDirsWithPrefix(std::string_view prefix) {
 }  // namespace
 
 // _____________________________________________________________________________
-// The thread-count override for the rebuild's scans must be set on the
-// dedicated reader created by `lazyScanWithUnlimitedReader` (and only there);
-// the permutation's shared reader, which is used by the query scans, must
-// never carry an override.
-TEST(IndexRebuilder, lazyScanNumThreadsOverride) {
-  auto index = ad_utility::testing::makeTestIndex(gtestCurrentTestName(),
-                                                  "<a> <b> <c> .");
-  const auto& permutation =
-      index.getImpl().getPermutation(Permutation::Enum::PSO);
-  auto cancellationHandle =
-      std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
-  auto state =
-      index.deltaTriplesManager().getCurrentLocatedTriplesSharedState();
-  ScanSpecification scanSpec{std::nullopt, std::nullopt, std::nullopt};
-  std::array<ColumnIndex, 1> additionalColumns{ADDITIONAL_COLUMN_GRAPH_ID};
-
-  auto scanWithOverride = [&](std::optional<size_t> numThreadsOverride) {
-    return permutation.lazyScanWithUnlimitedReader(
-        permutation.getScanSpecAndBlocks(scanSpec, *state), additionalColumns,
-        cancellationHandle, *state, numThreadsOverride);
-  };
-  auto [reader, scan] = scanWithOverride(3);
-  EXPECT_EQ(reader->lazyScanNumThreadsOverride_, std::optional<size_t>{3});
-  auto [readerDefault, scanDefault] = scanWithOverride(std::nullopt);
-  EXPECT_EQ(readerDefault->lazyScanNumThreadsOverride_, std::nullopt);
-  EXPECT_EQ(permutation.reader().lazyScanNumThreadsOverride_, std::nullopt);
-
-  // Recomputing the statistics with the throttle set must give exactly the
-  // same result as with the default (0, which means "fall back to
-  // `lazy-index-scan-num-threads`"). This exercises the translation of the
-  // runtime parameter to the override at both of its use sites.
-  auto statsDefault = index.getImpl().recomputeStatistics(state);
-  auto cleanup = setRuntimeParameterForTest<
-      &RuntimeParameters::rebuildIndexScanNumThreads_>(2);
-  EXPECT_EQ(index.getImpl().recomputeStatistics(state), statsDefault);
-}
-
-// _____________________________________________________________________________
-// All of the server-integration tests below are compiled out under
-// Emscripten: the `server` library they need is not built there (see the
-// include of `engine/Server.h` above), and the tests hang under Emscripten
-// anyway (threaded server integration).
+// Compiled out under Emscripten: the `server` library it needs is not built
+// there (see the include of `engine/Server.h` above), and the test hangs
+// under Emscripten anyway (threaded server integration).
 #ifndef __EMSCRIPTEN__
 TEST(IndexRebuilder, serverIntegration) {
-#ifdef __EMSCRIPTEN__
-  GTEST_SKIP() << "Skipped under Emscripten: this test hangs (threaded server "
-                  "integration).";
-#endif
   namespace fs = std::filesystem;
   cleanDirsWithPrefix("previous.");
   cleanDirsWithPrefix("rebuild.");
@@ -934,13 +896,13 @@ TEST(IndexRebuilder, serverIntegration) {
   cleanDirsWithPrefix("previous.");
   cleanDirsWithPrefix("serverIntegration.");
 }
+#endif  // __EMSCRIPTEN__
 
 // _____________________________________________________________________________
+// Compiled out under Emscripten like `serverIntegration` above: the `server`
+// library it needs is not built there.
+#ifndef __EMSCRIPTEN__
 TEST(IndexRebuilder, serverIntegrationDroppedStateWarnings) {
-#ifdef __EMSCRIPTEN__
-  GTEST_SKIP() << "Skipped under Emscripten: this test hangs (threaded server "
-                  "integration).";
-#endif
   SKIP_IF_LOGLEVEL_IS_LOWER(WARN);
   cleanDirsWithPrefix("droppedState.");
   namespace net = boost::asio;
@@ -992,6 +954,7 @@ TEST(IndexRebuilder, serverIntegrationDroppedStateWarnings) {
   threadPool.join();
   cleanDirsWithPrefix("droppedState.");
 }
+#endif  // __EMSCRIPTEN__
 
 // _____________________________________________________________________________
 // The thread-count override for the rebuild's scans must be set on the
