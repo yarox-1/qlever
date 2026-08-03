@@ -655,8 +655,8 @@ class IndexImpl {
   // set, it overrides the number of compress/write threads of the writer
   // (see the `CompressedRelationWriter` constructor).
   CompressedRelationWriter::WriterAndCallback getWriterAndCallback(
-      IndexMetaData& metaData, size_t numColumns,
-      const std::string& fileName) const;
+      IndexMetaData& metaData, size_t numColumns, const std::string& fileName,
+      std::optional<size_t> numWriterThreads = std::nullopt) const;
 
   // TODO<joka921> Get rid of the `numColumns` by including them into the
   // `sortedTriples` argument.
