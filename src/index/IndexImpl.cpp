@@ -2194,7 +2194,8 @@ template <typename CustomAction>
 template <typename CustomAction>
 std::packaged_task<void()> computeStatistics(
     const LocatedTriplesSharedState& locatedTriplesSharedState, size_t& counter,
-    const Permutation& permutation, CustomAction customAction) {
+    const Permutation& permutation, CustomAction customAction,
+    const std::function<void(size_t)>& progress) {
   return std::packaged_task<void()>{[&counter, &permutation,
                                      &locatedTriplesSharedState, progress,
                                      customAction = std::move(customAction)]() {

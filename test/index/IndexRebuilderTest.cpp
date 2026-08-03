@@ -5,6 +5,7 @@
 //  UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
 #include <absl/strings/str_cat.h>
+#include <absl/strings/str_format.h>
 #include <absl/time/time.h>
 #include <gmock/gmock.h>
 
@@ -13,7 +14,11 @@
 #include <boost/asio/detached.hpp>
 #include <boost/asio/thread_pool.hpp>
 #include <boost/asio/use_future.hpp>
+#include <deque>
+#include <fstream>
 #include <future>
+#include <iterator>
+#include <numeric>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -41,6 +46,7 @@
 #include "index/TripleComponentConversions.h"
 #include "index/TripleComponentConversions.h"
 #include "index/vocabulary/VocabularyType.h"
+#include "util/File.h"
 #include "util/FilesystemHelpers.h"
 #include "util/SourceLocation.h"
 
@@ -630,6 +636,36 @@ TEST(IndexRebuilder, materializeToIndex) {
     qlever::materializeToIndex(index.getImpl(), newIndexName, state, vocab,
                                blankNodes, cancellationHandle, logFile);
     EXPECT_TRUE(ql::filesystem::exists(logFile));
+
+    // Each phase writes its header (which says what is being processed,
+    // depending on which permutations the index has) and at least its final
+    // progress line (with a percentage and an average speed) to the rebuild's
+    // log file.
+    {
+      auto logStream = ad_utility::makeIfstream(logFile);
+      std::string logContent{std::istreambuf_iterator<char>{logStream}, {}};
+      using ::testing::HasSubstr;
+      EXPECT_THAT(logContent, HasSubstr("Writing new vocabulary (merging "
+                                        "existing and new words) ..."));
+      EXPECT_THAT(
+          logContent,
+          HasSubstr(loadAllPermutations
+                        ? "Recomputing statistics (from 4 permutations, 3 "
+                          "normal and 1 internal) ..."
+                        : "Recomputing statistics (from 2 permutations, 1 "
+                          "normal and 1 internal) ..."));
+      EXPECT_THAT(logContent,
+                  HasSubstr(loadAllPermutations
+                                ? "Writing new index (8 permutations, 6 "
+                                  "normal and 2 internal) ..."
+                                : "Writing new index (4 permutations, 2 "
+                                  "normal and 2 internal) ..."));
+      EXPECT_THAT(logContent, HasSubstr("Words written: "));
+      EXPECT_THAT(logContent, HasSubstr("Triples counted: "));
+      EXPECT_THAT(logContent, HasSubstr("Triples written: "));
+      EXPECT_THAT(logContent, HasSubstr("(100.0%)"));
+      EXPECT_THAT(logContent, HasSubstr("[average speed "));
+    }
 
     IndexImpl newIndex{ad_utility::makeUnlimitedAllocator<Id>()};
     newIndex.usePatterns() = usePatterns;
