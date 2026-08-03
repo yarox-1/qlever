@@ -26,6 +26,7 @@
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryPlanner.h"
 #include "engine/RebuildIndexStrategy.h"
+#include "engine/RebuildIndexStrategy.h"
 #include "global/RuntimeParameters.h"
 #include "index/DeltaTriples.h"
 #include "index/Index.h"
@@ -260,12 +261,6 @@ struct EngineConfig : CommonConfig {
   // whenever `RebuildIndexStrategy::shouldTriggerRebuild` says so. If `nullopt`
   // (the default), rebuilds are only triggered manually.
   std::optional<RebuildIndexStrategy> rebuildIndexStrategy_ = std::nullopt;
-
-  // Which `previous.*` index directories to keep after a successful index
-  // rebuild (manual or automatic), see `KeepPreviousIndexDirs`. The default
-  // keeps the original and the most recent one.
-  KeepPreviousIndexDirs keepPreviousIndexDirs_ =
-      KeepPreviousIndexDirs::OriginalAndMostRecent;
 
   // If set to true, no permutations will be loaded from disk. This is useful
   // when only queries that don't require accessing the permutations need to be
