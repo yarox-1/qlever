@@ -246,10 +246,10 @@ addLinkAndDiscoverTest(UnionTest engine)
 
 if (SINGLE_TEST_BINARY)
     target_sources(QLeverAllUnitTestsMain PUBLIC TokenTest.cpp TokenTestCtreHelper.cpp)
-    qlever_target_link_libraries(QLeverAllUnitTestsMain parser qlever_util)
+    qlever_target_link_libraries(QLeverAllUnitTestsMain sparqlParser qlever_util)
 else ()
     add_executable(TokenTest TokenTest.cpp TokenTestCtreHelper.cpp)
-    linkAndDiscoverTest(TokenTest parser qlever_util)
+    linkAndDiscoverTest(TokenTest sparqlParser qlever_util)
 endif ()
 
 addLinkAndDiscoverTestNoLibs(RdfParserTest index)
@@ -293,7 +293,7 @@ addLinkAndDiscoverTest(MinusTest engine)
 # this test runs for quite some time and might have spurious failures!
 # Therefore it is compiled, but not run. If you want to run it,
 # change the following two lines.
-addAndLinkTest(SortPerformanceEstimatorTest sortPerformanceEstimator parser)
+addAndLinkTest(SortPerformanceEstimatorTest sortPerformanceEstimator sparqlParser)
 #addLinkAndDiscoverTest(SortPerformanceEstimatorTest sortPerformanceEstimator)
 
 addLinkAndDiscoverTestNoLibs(SerializerTest)
@@ -358,7 +358,7 @@ addLinkAndDiscoverTest(GeoConvertersTest qlever_util)
 addLinkAndDiscoverTest(HttpUtilsTest qlever_util http)
 addLinkAndDiscoverTest(HttpUtilsTest qlever_util http)
 
-addLinkAndDiscoverTest(DateYearDurationTest qlever_util parser)
+addLinkAndDiscoverTest(DateYearDurationTest qlever_util sparqlParser)
 
 addLinkAndDiscoverTest(DurationTest qlever_util)
 addLinkAndDiscoverTest(DurationTest qlever_util)
