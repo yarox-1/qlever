@@ -8,6 +8,7 @@
 #include "engine/CallFixedSize.h"
 #include "engine/IndexScan.h"
 #include "global/Pattern.h"
+#include "global/RuntimeParameters.h"
 #include "index/IndexImpl.h"
 #include "util/ParallelExecutor.h"
 
