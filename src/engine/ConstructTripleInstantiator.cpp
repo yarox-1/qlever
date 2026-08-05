@@ -129,7 +129,7 @@ std::string formatTriple(const EvaluatedTriple& evaluatedTriple,
 
   const auto& [subject, predicate, object] = evaluatedTriple;
 
-  bool includeDataType = (format == ntriples);
+  const bool includeDataType = (format == ntriples);
 
   std::string s = formatTerm(*subject, includeDataType);
   std::string p = formatTerm(*predicate, includeDataType);
