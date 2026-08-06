@@ -400,6 +400,8 @@ if (NOT _DISABLE_EMSCRIPTEN_PROBLEMATIC_TESTS)
     addLinkAndDiscoverTest(HttpTest Boost::iostreams http)
 endif ()
 
+addLinkAndDiscoverTest(HttpProxyConfigTest http)
+
 addLinkAndDiscoverTestNoLibs(CallFixedSizeTest)
 
 addLinkAndDiscoverTestNoLibs(ConstexprUtilsTest)
