@@ -80,6 +80,7 @@ class Server {
   FRIEND_TEST(IndexRebuilder, serverIntegration);
   FRIEND_TEST(IndexRebuilder, serverIntegrationDroppedStateWarnings);
   FRIEND_TEST(IndexRebuilder, serverIntegrationAutomaticRebuild);
+  FRIEND_TEST(IndexRebuilder, serverIntegrationKeepPreviousIndexDirs);
   friend serverTestHelpers::ServerForTesting;
 
  public:
@@ -136,6 +137,12 @@ class Server {
   // whenever the strategy says so, see `triggerRebuildIfStrategySaysSo`. Set
   // via the `--rebuild-index-strategy` option of `qlever-server`.
   std::optional<qlever::RebuildIndexStrategy> rebuildIndexStrategy_;
+
+  // Which `previous.*` index directories to keep after a successful rebuild
+  // (manual or automatic), see `KeepPreviousIndexDirs`. Set via the
+  // `--rebuild-keep-previous-index-dirs` option of `qlever-server`.
+  qlever::KeepPreviousIndexDirs keepPreviousIndexDirs_ =
+      qlever::KeepPreviousIndexDirs::OriginalAndMostRecent;
 
   // MetricsReader for serving the /metrics endpoint. `nullptr` when metrics are
   // disabled (--enable-metrics not passed).
