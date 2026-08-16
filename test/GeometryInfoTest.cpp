@@ -202,8 +202,9 @@ constexpr std::array<uint32_t, 7> allTestLiteralNumGeometries{1, 1, 1, 2,
 // ____________________________________________________________________________
 TEST(GeometryInfoTest, BasicTests) {
   // Constructor and getters
-  GeometryInfo g{5,   {{1, 1}, {2, 2}},  {1.5, 1.5},
-                 {2}, MetricLength{900}, MetricArea{5}};
+  GeometryInfo g{
+      5, {{1, 1}, {2, 2}}, {1.5, 1.5}, {2}, MetricLength{900}, MetricArea{5}, 1,
+      2};
   ASSERT_EQ(g.getWktType().type(), 5);
   ASSERT_NEAR(g.getCentroid().centroid().getLat(), 1.5, 0.0001);
   ASSERT_NEAR(g.getCentroid().centroid().getLng(), 1.5, 0.0001);
@@ -215,35 +216,47 @@ TEST(GeometryInfoTest, BasicTests) {
   ASSERT_EQ(g.getNumGeometries().numGeometries(), 2);
   ASSERT_NEAR(g.getMetricLength().length(), 900, 0.0001);
   ASSERT_NEAR(g.getMetricArea().area(), 5, 0.0001);
+  ASSERT_EQ(g.getCrsType().type(), 1);
+  ASSERT_EQ(g.getSourceCrsType().type(), 2);
 
   // Too large wkt type value
   AD_EXPECT_THROW_WITH_MESSAGE(
       GeometryInfo(120, {{1, 1}, {2, 2}}, {1.5, 1.5}, {1}, MetricLength{1},
-                   MetricArea{5}),
+                   MetricArea{5}, 1, 1),
       ::testing::HasSubstr("WKT Type out of range"));
+
+  // Too large crs type value
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      GeometryInfo(5, {{1, 1}, {2, 2}}, {1.5, 1.5}, {1}, MetricLength{1},
+                   MetricArea{5}, 2, 7),
+      ::testing::HasSubstr("CRS Type out of range"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      GeometryInfo(5, {{1, 1}, {2, 2}}, {1.5, 1.5}, {1}, MetricLength{1},
+                   MetricArea{5}, 10, 2),
+      ::testing::HasSubstr("CRS Type out of range"));
 
   // Wrong bounding box point ordering
   AD_EXPECT_THROW_WITH_MESSAGE(
       GeometryInfo(1, {{2, 2}, {1, 1}}, {1.5, 1.5}, {1}, MetricLength{1},
-                   MetricArea{0}),
+                   MetricArea{0}, 1, 1),
       ::testing::HasSubstr("Bounding box coordinates invalid"));
 
   // Zero geometries
   AD_EXPECT_THROW_WITH_MESSAGE(
       GeometryInfo(1, {{2, 2}, {3, 3}}, {1.5, 1.5}, {0}, MetricLength{1},
-                   MetricArea{5}),
+                   MetricArea{5}, 1, 1),
       ::testing::HasSubstr("Number of geometries must be strictly positive"));
 
   // Negative length
   AD_EXPECT_THROW_WITH_MESSAGE(
       GeometryInfo(5, {{1, 1}, {2, 2}}, {1.5, 1.5}, {1}, MetricLength{-900},
-                   MetricArea{5}),
+                   MetricArea{5}, 1, 1),
       ::testing::HasSubstr("Metric length must be positive"));
 
   // Negative area
   AD_EXPECT_THROW_WITH_MESSAGE(
       GeometryInfo(5, {{1, 1}, {2, 2}}, {1.5, 1.5}, {1}, MetricLength{0},
-                   MetricArea{-900}),
+                   MetricArea{-900}, 1, 1),
       ::testing::HasSubstr("Metric area must be positive"));
 }
 

@@ -88,6 +88,40 @@ struct GeometryType {
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL_CONSTEXPR(GeometryType, type_)
 };
 
+// Represents the actual CRS type, for the meaning see `libspatialjoin`'s
+// `CRSType`.
+struct ActualCrsType {
+ private:
+  uint8_t type_;
+
+ public:
+  explicit ActualCrsType(uint8_t type);
+
+  uint8_t type() const { return type_; };
+
+  // Returns the representing IRI.
+  std::optional<std::string_view> asIri() const;
+
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL_CONSTEXPR(ActualCrsType, type_)
+};
+
+// Represents the source CRS type (before parsing/projecting), for the meaning
+// see `libspatialjoin`'s `CRSType`. Identical structure to 'ActualCrsType'.
+struct SourceCrsType {
+ private:
+  uint8_t type_;
+
+ public:
+  explicit SourceCrsType(uint8_t type);
+
+  uint8_t type() const { return type_; };
+
+  // Returns the representing IRI.
+  std::optional<std::string_view> asIri() const;
+
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL_CONSTEXPR(SourceCrsType, type_)
+};
+
 // Represents the number of child geometries inside a collection geometry type.
 struct NumGeometries {
  private:
@@ -155,7 +189,8 @@ class GeometryInfo;
 template <typename T>
 CPP_concept RequestedInfoT =
     SameAsAny<T, GeometryInfo, Centroid, BoundingBox, GeometryType,
-              NumGeometries, MetricLength, MetricArea>;
+              ActualCrsType, SourceCrsType, NumGeometries, MetricLength,
+              MetricArea>;
 
 // Where the actual geometries are required, this type can be used.
 using GeoPointOrWkt = std::variant<GeoPoint, std::string>;
@@ -176,6 +211,8 @@ class GeometryInfo {
   // `GeoVocabulary` to represent invalid literals.
   EncodedBoundingBox boundingBox_;
   uint64_t geometryTypeAndCentroid_;
+  ActualCrsType actualCrs_;
+  SourceCrsType sourceCrs_;
   uint32_t numGeometries_;
   MetricLength metricLength_;
   MetricArea metricArea_;
@@ -192,7 +229,8 @@ class GeometryInfo {
  public:
   GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
                Centroid centroid, NumGeometries numGeometries,
-               MetricLength metricLength, MetricArea metricArea);
+               MetricLength metricLength, MetricArea metricArea,
+               uint8_t actualCrs, uint8_t sourceCrs);
 #ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   // Required for `bit_cast`.
   GeometryInfo() = default;
@@ -212,6 +250,17 @@ class GeometryInfo {
 
   // Parse an arbitrary WKT literal and return only the geometry type.
   static std::optional<GeometryType> getWktType(std::string_view wkt);
+
+  // Get the actual CRS Type.
+  ActualCrsType getCrsType() const;
+
+  // Get the source CRS Type.
+  SourceCrsType getSourceCrsType() const;
+
+  // Parse an arbitrary WKT literal and return only the contained CRS type.
+  // As 'ActualCrsType' cannot be acquired from the wkt string, there is no
+  // function for it.
+  static std::optional<SourceCrsType> getSourceCrsType(std::string_view wkt);
 
   // Extract centroid from geometryTypeAndCentroid_ and convert it to GeoPoint.
   Centroid getCentroid() const;
