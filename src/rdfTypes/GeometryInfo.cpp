@@ -25,7 +25,9 @@ GeometryInfo::GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
                    boundingBox.upperRight().toBitRepresentation()},
       numGeometries_{numGeometries.numGeometries()},
       metricLength_{metricLength},
-      metricArea_{metricArea} {
+      metricArea_{metricArea},
+      actualCrs_{actualCrs},
+      sourceCrs_{sourceCrs} {
   // The WktType only has 8 different values and we have 4 unused bits for the
   // ValueId datatype of the centroid (it is always a point). Therefore we fold
   // the attributes together. On OSM planet this will save approx. 1 GiB in
@@ -43,11 +45,9 @@ GeometryInfo::GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
   AD_CORRECTNESS_CHECK(actualCrs <= 3, "CRS Type out of range");
   AD_CORRECTNESS_CHECK(actualCrs > 0,
                        "CRS Type indicates invalid/unsupported geometry");
-  actualCrs_ = ActualCrsType{actualCrs};
   AD_CORRECTNESS_CHECK(sourceCrs <= 3, "CRS Type out of range");
   AD_CORRECTNESS_CHECK(sourceCrs > 0,
                        "CRS Type indicates invalid/unsupported geometry");
-  sourceCrs_ = SourceCrsType{sourceCrs};
 
   AD_CORRECTNESS_CHECK(
       boundingBox.lowerLeft().getLat() <= boundingBox.upperRight().getLat() &&
@@ -89,10 +89,14 @@ std::optional<GeometryInfo> GeometryInfo::fromWktLiteral(std::string_view wkt) {
   }
 
   // TODO<yarox-1> Adjust when parsing PR was merged. Placeholder default CRS
-  return GeometryInfo{
-      type,      boundingBox.value(), centroid.value(),
-      {numGeom}, metricLength,        MetricArea{area},
-  };
+  return GeometryInfo{type,
+                      boundingBox.value(),
+                      centroid.value(),
+                      {numGeom},
+                      metricLength,
+                      MetricArea{area},
+                      util::geo::CRSType::CRS84,
+                      util::geo::CRSType::CRS84};
 }
 
 // ____________________________________________________________________________
@@ -129,7 +133,7 @@ std::optional<SourceCrsType> GeometryInfo::getSourceCrsType(
     // Type 0 represents invalid/unsupported type
     return std::nullopt;
   }
-  return CrsType{crsType};
+  return SourceCrsType{crsType};
 };
 
 // ____________________________________________________________________________
@@ -137,7 +141,7 @@ GeometryInfo GeometryInfo::fromGeoPoint(const GeoPoint& point) {
   return {util::geo::WKTType::POINT, {point, point},
           Centroid{point},           {1},
           MetricLength{0.0},         MetricArea{0.0},
-          util::geo::CRSType::CRS84, util::WGS84};
+          util::geo::CRSType::CRS84, util::geo::CRSType::WGS84};
 }
 
 // ____________________________________________________________________________
@@ -148,10 +152,10 @@ GeometryType GeometryInfo::getWktType() const {
 }
 
 // ____________________________________________________________________________
-CrsType GeometryInfo::getCrsType() const { return actualCrs_; }
+ActualCrsType GeometryInfo::getCrsType() const { return actualCrs_; }
 
 // ____________________________________________________________________________
-CrsType GeometryInfo::getSourceCrsType() const { return sourceCrs_; }
+SourceCrsType GeometryInfo::getSourceCrsType() const { return sourceCrs_; }
 
 // ____________________________________________________________________________
 std::optional<std::string_view> GeometryType::asIri() const {
@@ -306,7 +310,7 @@ CPP_template_def(typename RequestedInfo)(requires RequestedInfoT<RequestedInfo>)
   } else if constexpr (std::is_same_v<RequestedInfo, ActualCrsType>) {
     return getCrsType();
   } else if constexpr (std::is_same_v<RequestedInfo, SourceCrsType>) {
-    return getSourceCrs();
+    return getSourceCrsType();
   } else if constexpr (std::is_same_v<RequestedInfo, NumGeometries>) {
     return getNumGeometries();
   } else if constexpr (std::is_same_v<RequestedInfo, MetricLength>) {
